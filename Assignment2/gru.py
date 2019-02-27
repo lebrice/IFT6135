@@ -14,7 +14,36 @@ from typing import Tuple
 from utils import one_hot_encoding, glorot_init
 
 
-class GRURNN(nn.Module):
+class GRU(nn.Module):  # Implement a stacked GRU RNN
+    """
+    Follow the same instructions as for RNN (above), but use the equations for 
+    GRU, not Vanilla RNN.
+    """
+
+    def __init__(self, emb_size, hidden_size, seq_len, batch_size, vocab_size, num_layers, dp_keep_prob):
+        super(GRU, self).__init__()
+
+        # TODO ========================
+
+    def init_weights_uniform(self):
+        # TODO ========================
+        pass
+
+    def init_hidden(self):
+        # TODO ========================
+        # a parameter tensor of shape (self.num_layers, self.batch_size, self.hidden_size)
+        return None
+
+    def forward(self, inputs, hidden):
+        # TODO ========================
+        return logits.view(self.seq_len, self.batch_size, self.vocab_size), hidden
+
+    def generate(self, input, hidden, generated_seq_len):
+        # TODO ========================
+        return samples
+
+
+class GRUCell(nn.Module):
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
         output_size = input_size
