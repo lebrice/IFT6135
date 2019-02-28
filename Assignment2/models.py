@@ -1,3 +1,4 @@
+from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
 import torch
 import torch.nn as nn
 
@@ -39,30 +40,30 @@ device = torch.device("cpu")
 # Use the GPU if you have one
 if torch.cuda.is_available():
     print("Using the GPU")
-    device = torch.device("cuda") 
+    device = torch.device("cuda")
 else:
     print("WARNING: You are about to run on cpu, and this will likely run out \
       of memory. \n You can try setting batch_size=1 to reduce memory usage")
 
-from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
 print(device)
+
 
 class RNNBase(nn.Module):
     """
-    Base class for a general RNN. The modules for Problems 1 & 2 (below) inherit from this class.
+    Base class for a general RNN. The modules for Problems #1 & #2 (below) inherit from this class.
     This way, almost all the code is common between #1 and #2, the only difference is the type of cell used to populate the 'recurrent_layers' attribute.
     """
 
     def __init__(
             self,
-            emb_size,
-            hidden_size,
-            seq_len,
-            batch_size,
-            vocab_size,
-            num_layers,
-            dp_keep_prob,
-            cell_type=VanillaRNNCell
+            emb_size: int,
+            hidden_size: int,
+            seq_len: int,
+            batch_size: int,
+            vocab_size: int,
+            num_layers: int,
+            dp_keep_prob: float,
+            cell_type: nn.Module = VanillaRNNCell
     ):
         """
         Implements a stacked vanilla RNN with Tanh nonlinearities.
@@ -117,7 +118,6 @@ class RNNBase(nn.Module):
             ) for i in range(self.num_layers)
         ])
         self.init_weights_uniform()
-
 
         print("total number of params:", num_trainable_params(self))
 
@@ -184,16 +184,16 @@ class RNNBase(nn.Module):
         # Tensor to hold the outputs.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
         embeddings = self.embedding_layer(inputs).to(device)
-        
+
         # h_t: torch.Tensor = torch.Tensor(self.num_layers, self.batch_size, self.hidden_size)
         h_t: List[torch.Tensor] = [None] * self.num_layers
-        
-        for t, x in enumerate(embeddings): 
+
+        for t, x in enumerate(embeddings):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 h_prev = hidden[layer] if t == 0 else h_t[layer-1]
                 x, h_t[layer] = rnn_cell(x, h_prev)
             logits[t] = x
-        
+
         final_states = torch.stack(h_t)
         return logits, final_states
 
@@ -201,6 +201,7 @@ class RNNBase(nn.Module):
         """
         Equivalent to 'forward', but the intermediate outputs and hidden states are kept in variables.
         NOTE: I think this might be useful for part 4 or 5.
+        TODO: The backward-pass is having some issues here, because we do item assignment inside a tensor.
         """
         h_0 = hidden
         # holds all the intermediate hidden states
@@ -219,7 +220,7 @@ class RNNBase(nn.Module):
                 x = x_t if layer == 0 else Y[t][layer-1]
                 # the previous state is either the initial state or the state at last timestep.
                 prev_state = h_0[layer] if t == 0 else H[t-1][layer]
-                
+
                 # compute the new outputs and state
                 output, new_state = rnn_cell(x, prev_state)
                 H[t][layer] = new_state
@@ -281,6 +282,7 @@ class RNN(RNNBase):
         print(kwargs)
         super().__init__(cell_type=VanillaRNNCell, *args, **kwargs)
 
+
 # Problem 2
 class GRU(RNNBase):
     def __init__(self, *args, **kwargs):
@@ -298,31 +300,6 @@ def clones(module, N):
 # Code for the Transformer model
 #
 ##############################################################################
-"""
-Implement the MultiHeadedAttention module of the transformer architecture.
-All other necessary modules have already been implemented for you.
-
-We're building a transfomer architecture for next-step prediction tasks, and 
-applying it to sequential language modelling. We use a binary "mask" to specify 
-which time-steps the model can use for the current prediction.
-This ensures that the model only attends to previous time-steps.
-
-The model first encodes inputs using the concatenation of a learned WordEmbedding 
-and a (in our case, hard-coded) PositionalEncoding.
-The word embedding maps a word's one-hot encoding into a dense real vector.
-The positional encoding 'tags' each element of an input sequence with a code that 
-identifies it's position (i.e. time-step).
-
-These encodings of the inputs are then transformed repeatedly using multiple
-copies of a TransformerBlock.
-This block consists of an application of MultiHeadedAttention, followed by a 
-standard MLP; the MLP applies *the same* mapping at every position.
-Both the attention and the MLP are applied with Resnet-style skip connections, 
-and layer normalization.
-
-The complete model consists of the embeddings, the stacked transformer blocks, 
-and a linear layer followed by a softmax.
-"""
 
 # This code has been modified from an open-source project, by David Krueger.
 # The original license is included below:
@@ -351,34 +328,149 @@ and a linear layer followed by a softmax.
 
 # ----------------------------------------------------------------------------------
 
-# TODO: implement this class
-class MultiHeadedAttention(nn.Module):
-    def __init__(self, n_heads, n_units, dropout=0.1):
-        """
-        n_heads: the number of attention heads
-        n_units: the number of output units
-        dropout: probability of DROPPING units
-        """
-        super(MultiHeadedAttention, self).__init__()
-        # This sets the size of the keys, values, and queries (self.d_k) to all
-        # be equal to the number of output units divided by the number of heads.
-        self.d_k = n_units // n_heads
-        # This requires the number of n_heads to evenly divide n_units.
-        assert n_units % n_heads == 0
-        self.n_units = n_units
 
-        # TODO: create/initialize any necessary parameters or layers
-        # Note: the only Pytorch modules you are allowed to use are nn.Linear
-        # and nn.Dropout
+class AttentionHead(nn.Module):
+    def __init__(self, d_model: int, d_k: int, d_v: int, drop_prob: float):
+        super().__init__()
+        self.d_model = d_model
+        self.d_k = d_k
+        self.d_v = d_v
 
-    def forward(self, query, key, value, mask=None):
+        self.w_q = nn.Linear(self.d_model, self.d_k, bias=False)
+        self.w_k = nn.Linear(self.d_model, self.d_k, bias=False)
+        self.w_v = nn.Linear(self.d_model, self.d_v, bias=False)
+
+    def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None) -> torch.Tensor:
         # TODO: implement the masked multi-head attention.
         # query, key, and value all have size: (batch_size, seq_len, self.n_units, self.d_k)
         # mask has size: (batch_size, seq_len, seq_len)
         # As described in the .tex, apply input masking to the softmax
         # generating the "attention values" (i.e. A_i in the .tex)
         # Also apply dropout to the attention values.
+        q = self.w_q(Q)
+        k = self.w_k(K)
+        v = self.w_v(V)
+        return scaled_dot_product_attention(q, k, v, mask)
 
+
+def scaled_dot_product_attention(
+    q_i: torch.Tensor,
+    k_i: torch.Tensor,
+    v_i: torch.Tensor,
+    m_i: torch.Tensor = None
+) -> torch.Tensor:
+    """
+    Performs the (matrix-version) of the scaled dot-product attention.
+    """
+    d_k = torch.Tensor([q_i.size()[-1]]).to(q_i.device)
+    x = torch.mm(q_i, k_i.transpose(0, 1))
+    x = x / torch.sqrt(d_k)
+    if m_i is not None:
+        x = x * m_i.float() 
+    x = torch.softmax(x, dim=0)
+    y = torch.mm(x, v_i)
+    return y
+
+
+# TODO: implement this class
+class MultiHeadedAttention(nn.Module):
+    """
+    Implement the MultiHeadedAttention module of the transformer architecture.
+    All other necessary modules have already been implemented for you.
+
+    We're building a transfomer architecture for next-step prediction tasks, and 
+    applying it to sequential language modelling. We use a binary "mask" to specify 
+    which time-steps the model can use for the current prediction.
+    This ensures that the model only attends to previous time-steps.
+
+    The model first encodes inputs using the concatenation of a learned WordEmbedding 
+    and a (in our case, hard-coded) PositionalEncoding.
+    The word embedding maps a word's one-hot encoding into a dense real vector.
+    The positional encoding 'tags' each element of an input sequence with a code that 
+    identifies it's position (i.e. time-step).
+
+    These encodings of the inputs are then transformed repeatedly using multiple
+    copies of a TransformerBlock.
+    This block consists of an application of MultiHeadedAttention, followed by a 
+    standard MLP; the MLP applies *the same* mapping at every position.
+    Both the attention and the MLP are applied with Resnet-style skip connections, 
+    and layer normalization.
+
+    The complete model consists of the embeddings, the stacked transformer blocks, 
+    and a linear layer followed by a softmax.
+    """
+
+    def __init__(self, n_heads: int, n_units: int, dropout=0.1):
+        """
+        n_heads: the number of attention heads
+        n_units: the number of output units
+        dropout: probability of DROPPING units
+        """
+        super().__init__()
+        self.n_heads = n_heads
+        # This sets the size of the keys, values, and queries (self.d_k) to all
+        # be equal to the number of output units divided by the number of heads.
+        self.d_k = n_units // n_heads
+        # This requires the number of n_heads to evenly divide n_units.
+        assert n_units % n_heads == 0
+        self.n_units = n_units
+        self.drop_prob = dropout
+        
+        # TODO: create/initialize any necessary parameters or layers
+        # Note: the only Pytorch modules you are allowed to use are nn.Linear
+        # and nn.Dropout
+        self.d_v = self.d_k
+        self.d_model = self.n_heads * self.d_k # (is always equal to self.n_units in this case.)
+        self.attention_heads: List[AttentionHead] = nn.ModuleList([
+            AttentionHead(
+                d_model=self.n_units,
+                d_k=self.d_k,
+                d_v=self.d_v,
+                drop_prob=self.drop_prob,
+            ) for i in range(self.n_heads)
+        ])
+        self.dropout = nn.Dropout(self.drop_prob)
+        self.w_o = nn.Linear(self.n_units, self.n_units, bias=False)
+
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask=None):
+        # TODO: implement the masked multi-head attention.
+        # query, key, and value all have size: (batch_size, seq_len, self.n_units, self.d_k)
+        # mask has size: (batch_size, seq_len, seq_len)
+        # As described in the .tex, apply input masking to the softmax
+        # generating the "attention values" (i.e. A_i in the .tex)
+        # Also apply dropout to the attention values.   
+        batch_size = query.size()[0]
+        seq_len = query.size()[1]
+        print(query.size(), key.size(), value.size(), mask.size())
+        print("d_k:", self.d_k)
+        print("num_heads:", self.n_heads)
+        print("n_units:", self.n_units)
+        print("batch_size:", batch_size)
+        print("seq_len:", seq_len)
+
+        # TODO: not sure how to "parallelize" the application of the attention cells:
+        #   - Should it be applied in parallel over the batch? over the sequence? over the number of units?
+        # --> Intuitively, it feels like the branches should all work on the same sequence
+
+        Q, K, V, M = query, key, value, mask
+        print(Q.size(), K.size(), V.size(), M.size())
+
+        def fix(t: torch.Tensor) -> torch.Tensor:
+            """ fix the ordering of dimensions the input tensors"""
+            t = t.unsqueeze(-1)
+            return t
+        # TODO: the indexing here isn't good. We need to figure this out.
+
+        H = []
+        for i, attention_head in enumerate(self.attention_heads):
+            h_i = attention_head(Q[i], K[i], V[i], M[i])
+            H.append(h_i)
+        H = torch.cat(H, dim=-1)
+
+        out = self.dropout(H)
+        out = self.w_o(out)
+        print(H.size(), out.size())
+        exit()
         return  # size: (batch_size, seq_len, self.n_units)
 
 
