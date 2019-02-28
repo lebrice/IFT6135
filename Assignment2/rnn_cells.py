@@ -74,14 +74,14 @@ class VanillaRNNCell(BaseRNNCell):
 class GRURNNCell(BaseRNNCell):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._reset = nn.Linear(input_size, hidden_size)
-        self._reset_u = nn.Linear(hidden_size, hidden_size, bias=False)
+        self._reset = nn.Linear(self.input_size, self.hidden_size)
+        self._reset_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-        self._forget = nn.Linear(input_size, hidden_size)
-        self._forget_u = nn.Linear(hidden_size, hidden_size, bias=False)
+        self._forget = nn.Linear(self.input_size, self.hidden_size)
+        self._forget_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-        self._state = nn.Linear(input_size, hidden_size)
-        self._state_u = nn.Linear(hidden_size, hidden_size, bias=False)
+        self._state = nn.Linear(self.input_size, self.hidden_size)
+        self._state_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def forward(self, x_t: torch.Tensor, h_t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         r_t = torch.sigmoid(self._reset(x_t) + self._reset_u(h_t))

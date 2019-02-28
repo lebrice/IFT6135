@@ -14,6 +14,7 @@ class Dense(nn.Module):
     Simple Dense layer with Dropout and linear activation.
     """
     def __init__(self, input_size: int, hidden_units: int, dropout_keep_prob=1.0):
+        super().__init__()
         self.linear = nn.Linear(input_size, hidden_units)
         self.dropout = nn.Dropout(1 - dropout_keep_prob)
 

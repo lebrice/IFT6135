@@ -37,7 +37,6 @@ from itertools import zip_longest
 from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
 
 
-
 class RNNBase(nn.Module):
     """
     Base class for a general RNN. The modules for Problems 1 & 2 (below) inherit from this class.
@@ -68,7 +67,8 @@ class RNNBase(nn.Module):
                       non-recurrent connections.
                       Do not apply dropout on recurrent connections.
 
-        cell_type (added):  The Type of cell to use. Currently one of 'GRUCell' or 'SRNNCell'
+        # added params:
+        cell_type:  The Type of cell to use. Currently one of 'GRUCell' or 'SRNNCell'
         """
 
         # TODO ========================
@@ -95,7 +95,7 @@ class RNNBase(nn.Module):
         self.num_layers = num_layers
         self.dp_keep_prob = dp_keep_prob
 
-        self.embedding_layer = nn.Embedding(self.emb_size, self.vocab_size)
+        self.embedding_layer = nn.Embedding(self.vocab_size, self.emb_size)
 
         # This is the only property which differs between the GRU and VanillaRNN networks.
         self.recurrent_layers: List[BaseRNNCell] = nn.ModuleList([
@@ -104,8 +104,10 @@ class RNNBase(nn.Module):
                 hidden_size=self.hidden_size,
                 output_size=self.hidden_size if i < self.num_layers - 1 else self.vocab_size,
                 dropout_keep_prob=self.dp_keep_prob if i < self.num_layers - 1 else 1.0
-            )
+            ) for i in range(self.num_layers)
         ])
+
+        self.init_weights_uniform()
 
     def init_weights_uniform(self):
         # TODO ========================
@@ -164,15 +166,24 @@ class RNNBase(nn.Module):
         # RNN. For a stacked RNN, the hidden states of the l-th layer are used as
         # inputs to to the {l+1}-st layer (taking the place of the input sequence).
 
+        # NOTE: can perhaps use this for Q4-5. TODO: the backward-pass fails in it though for now.
+        # return self.forward_detailed(inputs, hidden)
+
         # Tensor to hold the outputs.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
-        for t, x in enumerate(inputs):
+        embeddings = self.embedding_layer(inputs)
+        
+        # h_t: torch.Tensor = torch.Tensor(self.num_layers, self.batch_size, self.hidden_size)
+        h_t: List[torch.Tensor] = [None] * self.num_layers
+        
+        for t, x in enumerate(embeddings): 
             for layer, rnn_cell in enumerate(self.recurrent_layers):
-                # compute the new outputs and state
-                x, hidden[layer] = rnn_cell(x, hidden[layer])
-            # Save the output of the last layer
+                h_prev = hidden[layer] if t == 0 else h_t[layer-1]
+                x, h_t[layer] = rnn_cell(x, h_prev)
             logits[t] = x
-        return logits, hidden
+        
+        final_states = torch.stack(h_t)
+        return logits, final_states
 
     def forward_detailed(self, inputs: torch.Tensor, hidden: torch.Tensor):
         """
@@ -189,12 +200,14 @@ class RNNBase(nn.Module):
         # Tensor to hold the outputs of the last layer.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
 
-        for t, x_t in enumerate(inputs):
+        embeddings = self.embedding_layer(inputs)
+        for t, x_t in enumerate(embeddings):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 # the layer input is either the input sequence or the previous layer's output.
                 x = x_t if layer == 0 else Y[t][layer-1]
                 # the previous state is either the initial state or the state at last timestep.
                 prev_state = h_0[layer] if t == 0 else H[t-1][layer]
+                
                 # compute the new outputs and state
                 output, new_state = rnn_cell(x, prev_state)
                 H[t][layer] = new_state
@@ -235,12 +248,12 @@ class RNNBase(nn.Module):
         """
         # Tensor to hold the outputs.
         samples = torch.Tensor(self.generated_seq_len, self.batch_size)
-        x = input
+        x = self.embedding_layer(input)
         for t in range(generated_seq_len):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 # compute the new outputs and state
                 x, hidden[layer] = rnn_cell(x, hidden[layer])
-            
+
             # TODO: not sure exactly if this is correct or not.
             prob = torch.softmax(x, dim=1)
             print(prob)
@@ -253,6 +266,7 @@ class RNNBase(nn.Module):
 # Problem 1
 class RNN(RNNBase):
     def __init__(self, *args, **kwargs):
+        print(kwargs)
         super().__init__(cell_type=VanillaRNNCell, *args, **kwargs)
 
 # Problem 2
@@ -266,14 +280,12 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 
-
 # Problem 3
 ##############################################################################
 #
 # Code for the Transformer model
 #
 ##############################################################################
-
 """
 Implement the MultiHeadedAttention module of the transformer architecture.
 All other necessary modules have already been implemented for you.
