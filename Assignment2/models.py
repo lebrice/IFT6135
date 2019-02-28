@@ -441,37 +441,21 @@ class MultiHeadedAttention(nn.Module):
         # Also apply dropout to the attention values.   
         batch_size = query.size()[0]
         seq_len = query.size()[1]
-        print(query.size(), key.size(), value.size(), mask.size())
-        print("d_k:", self.d_k)
-        print("num_heads:", self.n_heads)
-        print("n_units:", self.n_units)
-        print("batch_size:", batch_size)
-        print("seq_len:", seq_len)
-
-        # TODO: not sure how to "parallelize" the application of the attention cells:
-        #   - Should it be applied in parallel over the batch? over the sequence? over the number of units?
-        # --> Intuitively, it feels like the branches should all work on the same sequence
-
+        
         Q, K, V, M = query, key, value, mask
-        print(Q.size(), K.size(), V.size(), M.size())
+        # print(Q.size(), K.size(), V.size(), M.size())
 
-        def fix(t: torch.Tensor) -> torch.Tensor:
-            """ fix the ordering of dimensions the input tensors"""
-            t = t.unsqueeze(-1)
-            return t
-        # TODO: the indexing here isn't good. We need to figure this out.
-
-        H = []
-        for i, attention_head in enumerate(self.attention_heads):
-            h_i = attention_head(Q[i], K[i], V[i], M[i])
-            H.append(h_i)
-        H = torch.cat(H, dim=-1)
-
-        out = self.dropout(H)
-        out = self.w_o(out)
-        print(H.size(), out.size())
-        exit()
-        return  # size: (batch_size, seq_len, self.n_units)
+        outputs: List[torch.Tensor] = []
+        for t, (q,k,v,m) in enumerate(zip(Q,K,V,M)):
+            # TODO: It feels a bit weird that we have to iterate over the batch dimension like this, not sure why. (but it works.)
+            h = torch.cat([
+                attention_head(q, k, v, m) for attention_head in self.attention_heads
+            ], dim=-1)
+            out = self.dropout(h)
+            out = self.w_o(out)
+            outputs.append(out)
+        y = torch.stack(outputs)
+        return y # size: (batch_size, seq_len, self.n_units)
 
 
 # ----------------------------------------------------------------------------------
