@@ -179,18 +179,15 @@ class RNNBase(nn.Module):
         # inputs to to the {l+1}-st layer (taking the place of the input sequence).
 
         # Tensor to hold the outputs.
-        logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
+        logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size).to(device)
         embeddings = self.embedding_layer(inputs).to(device)
 
-        # h_t: torch.Tensor = torch.Tensor(self.num_layers, self.batch_size, self.hidden_size)
         h_t: List[torch.Tensor] = [None] * self.num_layers
-
         for t, x in enumerate(embeddings):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 h_prev = hidden[layer] if t == 0 else h_t[layer-1]
                 x, h_t[layer] = rnn_cell(x, h_prev)
             logits[t] = x
-
         final_states = torch.stack(h_t)
         return logits, final_states
 
