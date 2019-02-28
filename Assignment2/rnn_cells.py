@@ -62,9 +62,9 @@ class BaseRNNCell(torch.nn.Module):
 class VanillaRNNCell(BaseRNNCell):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         self.linear_x = nn.Linear(self.input_size, self.hidden_size, bias=False)
         self.linear_h = nn.Linear(self.hidden_size, self.hidden_size)
+    
     def forward(self, x: torch.Tensor, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         y = self._dense(hidden_state)
         h = torch.tanh(self.linear_x(x) + self.linear_h(hidden_state))

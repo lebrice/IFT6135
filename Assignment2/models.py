@@ -32,10 +32,20 @@ import matplotlib.pyplot as plt
 
 from typing import Tuple, List
 from itertools import zip_longest
+from utils import num_trainable_params
 
+
+device = torch.device("cpu")
+# Use the GPU if you have one
+if torch.cuda.is_available():
+    print("Using the GPU")
+    device = torch.device("cuda") 
+else:
+    print("WARNING: You are about to run on cpu, and this will likely run out \
+      of memory. \n You can try setting batch_size=1 to reduce memory usage")
 
 from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
-
+print(device)
 
 class RNNBase(nn.Module):
     """
@@ -106,8 +116,10 @@ class RNNBase(nn.Module):
                 dropout_keep_prob=self.dp_keep_prob if i < self.num_layers - 1 else 1.0
             ) for i in range(self.num_layers)
         ])
-
         self.init_weights_uniform()
+
+
+        print("total number of params:", num_trainable_params(self))
 
     def init_weights_uniform(self):
         # TODO ========================
@@ -116,8 +128,8 @@ class RNNBase(nn.Module):
         for module in self.modules():
             if hasattr(module, "weight") and module.weight is not None:
                 # TODO: weren't we instructed to use Glorot init in the assignment instructions?
-                nn.init.uniform_(module.weight, -0.1, 0.1)
-                # glorot_init(module.weight)
+                # nn.init.uniform_(module.weight, -0.1, 0.1)
+                nn.init.xavier_normal_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 nn.init.zeros_(module.bias)
 
@@ -128,7 +140,7 @@ class RNNBase(nn.Module):
         # TODO ========================
         # initialize the hidden states to zero
         # a parameter tensor of shape (self.num_layers, self.batch_size, self.hidden_size)
-        return torch.zeros(self.num_layers, self.batch_size, self.hidden_size)
+        return torch.zeros(self.num_layers, self.batch_size, self.hidden_size).to(device)
 
     def forward(self, inputs: torch.Tensor, hidden: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -171,7 +183,7 @@ class RNNBase(nn.Module):
 
         # Tensor to hold the outputs.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
-        embeddings = self.embedding_layer(inputs)
+        embeddings = self.embedding_layer(inputs).to(device)
         
         # h_t: torch.Tensor = torch.Tensor(self.num_layers, self.batch_size, self.hidden_size)
         h_t: List[torch.Tensor] = [None] * self.num_layers
