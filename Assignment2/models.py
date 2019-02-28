@@ -329,6 +329,25 @@ def clones(module, N):
 # ----------------------------------------------------------------------------------
 
 
+def scaled_dot_product_attention(
+    q_i: torch.Tensor,
+    k_i: torch.Tensor,
+    v_i: torch.Tensor,
+    m_i: torch.Tensor = None
+) -> torch.Tensor:
+    """
+    Performs the (matrix-version) of the scaled dot-product attention.
+    """
+    d_k = torch.Tensor([q_i.size()[-1]]).to(q_i.device)
+    x = torch.mm(q_i, k_i.transpose(0, 1))
+    x = x / torch.sqrt(d_k)
+    if m_i is not None:
+        x = x * m_i.float()
+    x = torch.softmax(x, dim=0)
+    y = torch.mm(x, v_i)
+    return y
+
+
 class AttentionHead(nn.Module):
     def __init__(self, d_model: int, d_k: int, d_v: int, drop_prob: float):
         super().__init__()
@@ -347,29 +366,12 @@ class AttentionHead(nn.Module):
         # As described in the .tex, apply input masking to the softmax
         # generating the "attention values" (i.e. A_i in the .tex)
         # Also apply dropout to the attention values.
+
+        # project Q, K, and V down to spaces of dimensionality d_k, d_k, and d_v, respectively.
         q = self.w_q(Q)
         k = self.w_k(K)
         v = self.w_v(V)
         return scaled_dot_product_attention(q, k, v, mask)
-
-
-def scaled_dot_product_attention(
-    q_i: torch.Tensor,
-    k_i: torch.Tensor,
-    v_i: torch.Tensor,
-    m_i: torch.Tensor = None
-) -> torch.Tensor:
-    """
-    Performs the (matrix-version) of the scaled dot-product attention.
-    """
-    d_k = torch.Tensor([q_i.size()[-1]]).to(q_i.device)
-    x = torch.mm(q_i, k_i.transpose(0, 1))
-    x = x / torch.sqrt(d_k)
-    if m_i is not None:
-        x = x * m_i.float() 
-    x = torch.softmax(x, dim=0)
-    y = torch.mm(x, v_i)
-    return y
 
 
 # TODO: implement this class
@@ -421,6 +423,7 @@ class MultiHeadedAttention(nn.Module):
         # and nn.Dropout
         self.d_v = self.d_k
         self.d_model = self.n_heads * self.d_k # (is always equal to self.n_units in this case.)
+        
         self.attention_heads: List[AttentionHead] = nn.ModuleList([
             AttentionHead(
                 d_model=self.n_units,
@@ -445,7 +448,7 @@ class MultiHeadedAttention(nn.Module):
         Q, K, V, M = query, key, value, mask
         # print(Q.size(), K.size(), V.size(), M.size())
 
-        outputs: List[torch.Tensor] = []
+        y = torch.Tensor(batch_size, seq_len, self.n_units).to(query.device)
         for t, (q,k,v,m) in enumerate(zip(Q,K,V,M)):
             # TODO: It feels a bit weird that we have to iterate over the batch dimension like this, not sure why. (but it works.)
             h = torch.cat([
@@ -453,8 +456,8 @@ class MultiHeadedAttention(nn.Module):
             ], dim=-1)
             out = self.dropout(h)
             out = self.w_o(out)
-            outputs.append(out)
-        y = torch.stack(outputs)
+            y[t] = out
+        # y = torch.stack(outputs)
         return y # size: (batch_size, seq_len, self.n_units)
 
 
@@ -538,7 +541,8 @@ class FullTransformer(nn.Module):
 
     def forward(self, input_sequence, mask):
         embeddings = self.embedding(input_sequence)
-        return F.log_softmax(self.output_layer(self.transformer_stack(embeddings, mask)), dim=-1)
+        out = self.output_layer(self.transformer_stack(embeddings, mask))
+        return F.log_softmax(out, dim=-1)
 
 
 def make_model(vocab_size, n_blocks=6,
@@ -549,10 +553,22 @@ def make_model(vocab_size, n_blocks=6,
     ff = MLP(n_units, dropout)
     position = PositionalEncoding(n_units, dropout)
     model = FullTransformer(
-        transformer_stack=TransformerStack(TransformerBlock(
-            n_units, c(attn), c(ff), dropout), n_blocks),
-        embedding=nn.Sequential(WordEmbedding(
-            n_units, vocab_size), c(position)),
+        transformer_stack=TransformerStack(
+            TransformerBlock(
+                n_units,
+                c(attn),
+                c(ff),
+                dropout
+            ),
+            n_blocks
+        ),
+        embedding=nn.Sequential(
+            WordEmbedding(
+                n_units,
+                vocab_size
+            ),
+            c(position)
+        ),
         n_units=n_units,
         vocab_size=vocab_size
     )

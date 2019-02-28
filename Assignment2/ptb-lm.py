@@ -386,8 +386,15 @@ def run_epoch(model, data, is_train=False, lr=1.0):
             model.zero_grad()
             hidden = repackage_hidden(hidden)
             outputs, hidden = model(inputs, hidden)
-
+        
         targets = torch.from_numpy(y.astype(np.int64)).transpose(0, 1).contiguous().to(device)#.cuda()
+        
+        ## <--------- CHANGE:
+        if args.model == "TRANSFORMER" and torch.cuda.is_available():
+            targets = targets.cuda()
+        else:
+            targets = targets.cpu()
+        ## ------------->
         tt = torch.squeeze(targets.view(-1, model.batch_size * model.seq_len))
 
         # LOSS COMPUTATION
