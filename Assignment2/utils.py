@@ -8,6 +8,18 @@ Jérome Parent-Lévesque
 import torch
 import torch.nn as nn
 
+
+class Dense(nn.Module):
+    """
+    Simple Dense layer with Dropout and linear activation.
+    """
+    def __init__(self, input_size: int, hidden_units: int, dropout_keep_prob=1.0):
+        self.linear = nn.Linear(input_size, hidden_units)
+        self.dropout = nn.Dropout(1 - dropout_keep_prob)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.linear(inputs))
+
 def glorot_init(weight: torch.Tensor) -> None:
     nn.init.xavier_normal_(weight)
 
