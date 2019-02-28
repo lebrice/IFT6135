@@ -127,7 +127,7 @@ class RNNBase(nn.Module):
         # and all the biases to 0 (in place)
         for module in self.modules():
             if hasattr(module, "weight") and module.weight is not None:
-                # TODO: weren't we instructed to use Glorot init in the assignment instructions?
+                # TODO (Fabrice): weren't we instructed to use Glorot init in the assignment instructions?
                 # nn.init.uniform_(module.weight, -0.1, 0.1)
                 nn.init.xavier_normal_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
@@ -178,9 +178,6 @@ class RNNBase(nn.Module):
         # RNN. For a stacked RNN, the hidden states of the l-th layer are used as
         # inputs to to the {l+1}-st layer (taking the place of the input sequence).
 
-        # NOTE: can perhaps use this for Q4-5. TODO: the backward-pass fails in it though for now.
-        # return self.forward_detailed(inputs, hidden)
-
         # Tensor to hold the outputs.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
         embeddings = self.embedding_layer(inputs).to(device)
@@ -200,8 +197,8 @@ class RNNBase(nn.Module):
     def forward_detailed(self, inputs: torch.Tensor, hidden: torch.Tensor):
         """
         Equivalent to 'forward', but the intermediate outputs and hidden states are kept in variables.
-        NOTE: I think this might be useful for part 4 or 5.
-        TODO: The backward-pass is having some issues here, because we do item assignment inside a tensor.
+        NOTE: Perhaps this could be useful for part 4 or 5.
+        TODO: The backward-pass is having some issues here, because of item assignments inside a tensor.
         """
         h_0 = hidden
         # holds all the intermediate hidden states
@@ -329,25 +326,6 @@ def clones(module, N):
 # ----------------------------------------------------------------------------------
 
 
-def scaled_dot_product_attention(
-    q_i: torch.Tensor,
-    k_i: torch.Tensor,
-    v_i: torch.Tensor,
-    m_i: torch.Tensor = None
-) -> torch.Tensor:
-    """
-    Performs the (matrix-version) of the scaled dot-product attention.
-    """
-    d_k = torch.Tensor([q_i.size()[-1]]).to(q_i.device)
-    x = torch.mm(q_i, k_i.transpose(0, 1))
-    x = x / torch.sqrt(d_k)
-    if m_i is not None:
-        x = x * m_i.float()
-    x = torch.softmax(x, dim=0)
-    y = torch.mm(x, v_i)
-    return y
-
-
 class AttentionHead(nn.Module):
     def __init__(self, d_model: int, d_k: int, d_v: int, drop_prob: float):
         super().__init__()
@@ -360,19 +338,23 @@ class AttentionHead(nn.Module):
         self.w_v = nn.Linear(self.d_model, self.d_v, bias=False)
 
     def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None) -> torch.Tensor:
-        # TODO: implement the masked multi-head attention.
-        # query, key, and value all have size: (batch_size, seq_len, self.n_units, self.d_k)
-        # mask has size: (batch_size, seq_len, seq_len)
-        # As described in the .tex, apply input masking to the softmax
-        # generating the "attention values" (i.e. A_i in the .tex)
-        # Also apply dropout to the attention values.
-
-        # project Q, K, and V down to spaces of dimensionality d_k, d_k, and d_v, respectively.
+        """
+        Performs the (matrix-version) of the scaled dot-product attention.
+        
+        First, projects Q, K, and V down to spaces of dimensionality d_k, d_k, and d_v, respectively.
+        Then, computes the scaled dot-product masked attention.
+        """
         q = self.w_q(Q)
         k = self.w_k(K)
         v = self.w_v(V)
-        return scaled_dot_product_attention(q, k, v, mask)
-
+        x: torch.Tensor
+        x = torch.mm(q, k.transpose(0, 1))
+        x = x / torch.sqrt(torch.Tensor([self.d_k]).to(q.device))
+        if mask is not None:
+            x = x * mask.float()
+        x = torch.softmax(x, dim=0)
+        y = torch.mm(x, v)
+        return y
 
 # TODO: implement this class
 class MultiHeadedAttention(nn.Module):
@@ -421,9 +403,10 @@ class MultiHeadedAttention(nn.Module):
         # TODO: create/initialize any necessary parameters or layers
         # Note: the only Pytorch modules you are allowed to use are nn.Linear
         # and nn.Dropout
+
         self.d_v = self.d_k
-        self.d_model = self.n_heads * self.d_k # (is always equal to self.n_units in this case.)
-        
+        # d_model is used in the paper. (we use it too for consistency)
+        self.d_model = self.n_heads * self.d_k # (is always equal to self.n_units in our case.)
         self.attention_heads: List[AttentionHead] = nn.ModuleList([
             AttentionHead(
                 d_model=self.n_units,
@@ -441,13 +424,16 @@ class MultiHeadedAttention(nn.Module):
         # mask has size: (batch_size, seq_len, seq_len)
         # As described in the .tex, apply input masking to the softmax
         # generating the "attention values" (i.e. A_i in the .tex)
-        # Also apply dropout to the attention values.   
+        # Also apply dropout to the attention values.
         batch_size = query.size()[0]
         seq_len = query.size()[1]
         
+        # TODO (Fabrice): Right now, there is no fourth dimension in query,key,value (as then mention above)
+        # This is because in our case H (n_layers = 16) is equal to the number of output features (n_units = 16)
+        # It might be important that we make sure that this works even with dk > 1, (H < n_units). 
+
         Q, K, V, M = query, key, value, mask
         # print(Q.size(), K.size(), V.size(), M.size())
-
         y = torch.Tensor(batch_size, seq_len, self.n_units).to(query.device)
         for t, (q,k,v,m) in enumerate(zip(Q,K,V,M)):
             # TODO: It feels a bit weird that we have to iterate over the batch dimension like this, not sure why. (but it works.)
@@ -457,8 +443,7 @@ class MultiHeadedAttention(nn.Module):
             out = self.dropout(h)
             out = self.w_o(out)
             y[t] = out
-        # y = torch.stack(outputs)
-        return y # size: (batch_size, seq_len, self.n_units)
+        return y
 
 
 # ----------------------------------------------------------------------------------
