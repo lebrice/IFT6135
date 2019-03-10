@@ -1,4 +1,3 @@
-from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
 import torch
 import torch.nn as nn
 
@@ -9,6 +8,25 @@ import copy
 import time
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
+
+
+from typing import Tuple, List
+from itertools import zip_longest
+from utils import num_trainable_params
+
+from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
+
+
+device = torch.device("cpu")
+# Use the GPU if you have one
+if torch.cuda.is_available():
+    print("Using the GPU")
+    device = torch.device("cuda")
+else:
+    print("WARNING: You are about to run on cpu, and this will likely run out \
+      of memory. \n You can try setting batch_size=1 to reduce memory usage")
+
+print(device)
 
 # NOTE ==============================================
 #
@@ -31,56 +49,39 @@ import matplotlib.pyplot as plt
 # except where indicated to implement the multi-head
 # attention.
 
-from typing import Tuple, List
-from itertools import zip_longest
-from utils import num_trainable_params
 
-
-device = torch.device("cpu")
-# Use the GPU if you have one
-if torch.cuda.is_available():
-    print("Using the GPU")
-    device = torch.device("cuda")
-else:
-    print("WARNING: You are about to run on cpu, and this will likely run out \
-      of memory. \n You can try setting batch_size=1 to reduce memory usage")
-
-print(device)
-
-
+# Problem 1
 class RNNBase(nn.Module):
     """
     Base class for a general RNN. The modules for Problems #1 & #2 (below) inherit from this class.
-    This way, almost all the code is common between #1 and #2, the only difference is the type of cell used to populate the 'recurrent_layers' attribute.
+    #1 and #2, the only difference is the type of cell used to populate the 'recurrent_layers' attribute.
+    This way, almost all the code is common between
+
+    # Implement a stacked vanilla RNN with Tanh nonlinearities.
     """
 
-    def __init__(
-            self,
-            emb_size: int,
-            hidden_size: int,
-            seq_len: int,
-            batch_size: int,
-            vocab_size: int,
-            num_layers: int,
-            dp_keep_prob: float,
-            cell_type: nn.Module = VanillaRNNCell
-    ):
+    def __init__(self,
+        emb_size: int,
+        hidden_size: int,
+        seq_len: int,
+        batch_size: int,
+        vocab_size: int,
+        num_layers: int,
+        dp_keep_prob: float,
+        cell_type: nn.Module = VanillaRNNCell,
+        ):
         """
-        Implements a stacked vanilla RNN with Tanh nonlinearities.
-
         emb_size:     The number of units in the input embeddings
         hidden_size:  The number of hidden units per layer
         seq_len:      The length of the input sequences
         vocab_size:   The number of tokens in the vocabulary (10,000 for Penn TreeBank)
-        num_layers:   The depth of the stack (i.e. the number of hidden layers at 
-                      each time-step)
-        dp_keep_prob: The probability of *not* dropping out units in the 
-                      non-recurrent connections.
-                      Do not apply dropout on recurrent connections.
-
-        # added params:
-        cell_type:  The Type of cell to use. Currently one of 'GRUCell' or 'SRNNCell'
+        num_layers:   The depth of the stack (i.e. the number of hidden layers at
+                    each time-step)
+        dp_keep_prob: The probability of *not* dropping out units in the
+                    non-recurrent connections.
+                    Do not apply dropout on recurrent connections.
         """
+        super().__init__()
 
         # TODO ========================
         # Initialization of the parameters of the recurrent and fc layers.
@@ -96,8 +97,6 @@ class RNNBase(nn.Module):
         # for Pytorch to recognize these parameters as belonging to this nn.Module
         # and compute their gradients automatically. You're not obligated to use the
         # provided clones function.
-
-        super().__init__()
         self.emb_size = emb_size
         self.hidden_size = hidden_size
         self.seq_len = seq_len
@@ -117,32 +116,45 @@ class RNNBase(nn.Module):
                 dropout_keep_prob=self.dp_keep_prob if i < self.num_layers - 1 else 1.0
             ) for i in range(self.num_layers)
         ])
-        self.init_weights_uniform()
+        self.init_weights()
 
         print("total number of params:", num_trainable_params(self))
 
-    def init_weights_uniform(self):
+    def init_weights(self):
         # TODO ========================
-        # Initialize all the weights uniformly in the range [-0.1, 0.1]
-        # and all the biases to 0 (in place)
+        # Initialize the embedding and output weights uniformly in the range [-0.1, 0.1]
+        # and output biases to 0 (in place). The embeddings should not use a bias vector.
+        # Initialize all other (i.e. recurrent and linear) weights AND biases uniformly 
+        # in the range [-k, k] where k is the square root of 1/hidden_size
         for module in self.modules():
             if hasattr(module, "weight") and module.weight is not None:
-                # TODO (Fabrice): weren't we instructed to use Glorot init in the assignment instructions?
-                # nn.init.uniform_(module.weight, -0.1, 0.1)
                 nn.init.xavier_normal_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 nn.init.zeros_(module.bias)
 
-    def init_hidden(self) -> torch.Tensor:
+    def init_hidden(self):
+        # TODO ========================
+        # initialize the hidden states to zero
         """
         This is used for the first mini-batch in an epoch, only.
         """
-        # TODO ========================
-        # initialize the hidden states to zero
         # a parameter tensor of shape (self.num_layers, self.batch_size, self.hidden_size)
         return torch.zeros(self.num_layers, self.batch_size, self.hidden_size).to(device)
 
-    def forward(self, inputs: torch.Tensor, hidden: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, inputs, hidden):
+        # TODO ========================
+        # Compute the forward pass, using nested python for loops.
+        # The outer for loop should iterate over timesteps, and the 
+        # inner for loop should iterate over hidden layers of the stack. 
+        # 
+        # Within these for loops, use the parameter tensors and/or nn.modules you 
+        # created in __init__ to compute the recurrent updates according to the 
+        # equations provided in the .tex of the assignment.
+        #
+        # Note that those equations are for a single hidden-layer RNN, not a stacked
+        # RNN. For a stacked RNN, the hidden states of the l-th layer are used as 
+        # inputs to to the {l+1}-st layer (taking the place of the input sequence).
+
         """
         Arguments:
             - inputs: A mini-batch of input sequences, composed of integers that 
@@ -150,34 +162,21 @@ class RNNBase(nn.Module):
                             shape: (seq_len, batch_size)
             - hidden: The initial hidden states for every layer of the stacked RNN.
                             shape: (num_layers, batch_size, hidden_size)
-
+        
         Returns:
             - Logits for the softmax over output tokens at every time-step.
-                    **Do NOT apply softmax to the outputs!**
-                    Pytorch's CrossEntropyLoss function (applied in ptb-lm.py) does 
-                    this computation implicitly.
+                **Do NOT apply softmax to the outputs!**
+                Pytorch's CrossEntropyLoss function (applied in ptb-lm.py) does 
+                this computation implicitly.
                         shape: (seq_len, batch_size, vocab_size)
             - The final hidden states for every layer of the stacked RNN.
-                    These will be used as the initial hidden states for all the 
-                    mini-batches in an epoch, except for the first, where the return 
-                    value of self.init_hidden will be used.
-                    See the repackage_hiddens function in ptb-lm.py for more details, 
-                    if you are curious.
+                These will be used as the initial hidden states for all the 
+                mini-batches in an epoch, except for the first, where the return 
+                value of self.init_hidden will be used.
+                See the repackage_hiddens function in ptb-lm.py for more details, 
+                if you are curious.
                         shape: (num_layers, batch_size, hidden_size)
         """
-        # TODO ========================
-        # Compute the forward pass, using a nested python for loops.
-        # The outer for loop should iterate over timesteps, and the
-        # inner for loop should iterate over hidden layers of the stack.
-        #
-        # Within these for loops, use the parameter tensors and/or nn.modules you
-        # created in __init__ to compute the recurrent updates according to the
-        # equations provided in the .tex of the assignment.
-        #
-        # Note that those equations are for a single hidden-layer RNN, not a stacked
-        # RNN. For a stacked RNN, the hidden states of the l-th layer are used as
-        # inputs to to the {l+1}-st layer (taking the place of the input sequence).
-
         # Tensor to hold the outputs.
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size).to(device)
         embeddings = self.embedding_layer(inputs).to(device)
@@ -190,7 +189,7 @@ class RNNBase(nn.Module):
             logits[t] = x
         final_states = torch.stack(h_t)
         return logits, final_states
-
+    
     def forward_detailed(self, inputs: torch.Tensor, hidden: torch.Tensor):
         """
         Equivalent to 'forward', but the intermediate outputs and hidden states are kept in variables.
@@ -233,13 +232,14 @@ class RNNBase(nn.Module):
         # TODO ========================
         # Compute the forward pass, as in the self.forward method (above).
         # You'll probably want to copy substantial portions of that code here.
-        #
+        # 
         # We "seed" the generation by providing the first inputs.
-        # Subsequent inputs are generated by sampling from the output distribution,
+        # Subsequent inputs are generated by sampling from the output distribution, 
         # as described in the tex (Problem 5.3)
-        # Unlike for self.forward, you WILL need to apply the softmax activation
-        # function here in order to compute the parameters of the categorical
+        # Unlike for self.forward, you WILL need to apply the softmax activation 
+        # function here in order to compute the parameters of the categorical 
         # distributions to be sampled from at each time-step.
+
         """
         Arguments:
             - input: A mini-batch of input tokens (NOT sequences!)
@@ -247,8 +247,8 @@ class RNNBase(nn.Module):
             - hidden: The initial hidden states for every layer of the stacked RNN.
                             shape: (num_layers, batch_size, hidden_size)
             - generated_seq_len: The length of the sequence to generate.
-                            Note that this can be different than the length used 
-                            for training (self.seq_len)
+                        Note that this can be different than the length used 
+                        for training (self.seq_len)
         Returns:
             - Sampled sequences of tokens
                         shape: (generated_seq_len, batch_size)
@@ -273,20 +273,29 @@ class RNNBase(nn.Module):
 # Problem 1
 class RNN(RNNBase):
     def __init__(self, *args, **kwargs):
-        print(kwargs)
+        print(args, kwargs)
         super().__init__(cell_type=VanillaRNNCell, *args, **kwargs)
 
 
 # Problem 2
 class GRU(RNNBase):
     def __init__(self, *args, **kwargs):
+        print(args, kwargs)
         super().__init__(cell_type=GRURNNCell, *args, **kwargs)
 
 
 def clones(module, N):
-    "A helper function for producing N identical layers (each with their own parameters)."
-    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+    """
+    A helper function for producing N identical layers (each with their own parameters).
+    
+    inputs: 
+        module: a pytorch nn.module
+        N (int): the number of copies of that module to return
 
+    returns:
+        a ModuleList with the copies of the module (the ModuleList is itself also a module)
+    """
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 # Problem 3
 ##############################################################################
@@ -294,6 +303,32 @@ def clones(module, N):
 # Code for the Transformer model
 #
 ##############################################################################
+
+"""
+Implement the MultiHeadedAttention module of the transformer architecture.
+All other necessary modules have already been implemented for you.
+
+We're building a transfomer architecture for next-step prediction tasks, and 
+applying it to sequential language modelling. We use a binary "mask" to specify 
+which time-steps the model can use for the current prediction.
+This ensures that the model only attends to previous time-steps.
+
+The model first encodes inputs using the concatenation of a learned WordEmbedding 
+and a (in our case, hard-coded) PositionalEncoding.
+The word embedding maps a word's one-hot encoding into a dense real vector.
+The positional encoding 'tags' each element of an input sequence with a code that 
+identifies it's position (i.e. time-step).
+
+These encodings of the inputs are then transformed repeatedly using multiple
+copies of a TransformerBlock.
+This block consists of an application of MultiHeadedAttention, followed by a 
+standard MLP; the MLP applies *the same* mapping at every position.
+Both the attention and the MLP are applied with Resnet-style skip connections, 
+and layer normalization.
+
+The complete model consists of the embeddings, the stacked transformer blocks, 
+and a linear layer followed by a softmax.
+"""
 
 # This code has been modified from an open-source project, by David Krueger.
 # The original license is included below:
@@ -320,8 +355,8 @@ def clones(module, N):
 # SOFTWARE.
 
 
-# ----------------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------------
 
 class AttentionHead(nn.Module):
     def __init__(self, d_model: int, d_k: int, d_v: int, drop_prob: float):
@@ -353,54 +388,29 @@ class AttentionHead(nn.Module):
         y = torch.mm(x, v)
         return y
 
+
 # TODO: implement this class
 class MultiHeadedAttention(nn.Module):
-    """
-    Implement the MultiHeadedAttention module of the transformer architecture.
-    All other necessary modules have already been implemented for you.
-
-    We're building a transfomer architecture for next-step prediction tasks, and 
-    applying it to sequential language modelling. We use a binary "mask" to specify 
-    which time-steps the model can use for the current prediction.
-    This ensures that the model only attends to previous time-steps.
-
-    The model first encodes inputs using the concatenation of a learned WordEmbedding 
-    and a (in our case, hard-coded) PositionalEncoding.
-    The word embedding maps a word's one-hot encoding into a dense real vector.
-    The positional encoding 'tags' each element of an input sequence with a code that 
-    identifies it's position (i.e. time-step).
-
-    These encodings of the inputs are then transformed repeatedly using multiple
-    copies of a TransformerBlock.
-    This block consists of an application of MultiHeadedAttention, followed by a 
-    standard MLP; the MLP applies *the same* mapping at every position.
-    Both the attention and the MLP are applied with Resnet-style skip connections, 
-    and layer normalization.
-
-    The complete model consists of the embeddings, the stacked transformer blocks, 
-    and a linear layer followed by a softmax.
-    """
-
-    def __init__(self, n_heads: int, n_units: int, dropout=0.1):
+    def __init__(self, n_heads, n_units, dropout=0.1):
         """
         n_heads: the number of attention heads
         n_units: the number of output units
         dropout: probability of DROPPING units
         """
-        super().__init__()
-        self.n_heads = n_heads
-        # This sets the size of the keys, values, and queries (self.d_k) to all
+        super(MultiHeadedAttention, self).__init__()
+        # This sets the size of the keys, values, and queries (self.d_k) to all 
         # be equal to the number of output units divided by the number of heads.
         self.d_k = n_units // n_heads
         # This requires the number of n_heads to evenly divide n_units.
         assert n_units % n_heads == 0
-        self.n_units = n_units
-        self.drop_prob = dropout
-        
-        # TODO: create/initialize any necessary parameters or layers
-        # Note: the only Pytorch modules you are allowed to use are nn.Linear
-        # and nn.Dropout
+        self.n_units = n_units 
 
+        # TODO: create/initialize any necessary parameters or layers
+        # Initialize all weights and biases uniformly in the range [-k, k],
+        # where k is the square root of 1/n_units.
+        # Note: the only Pytorch modules you are allowed to use are nn.Linear 
+        # and nn.Dropout
+        self.drop_prob = dropout
         self.d_v = self.d_k
         # d_model is used in the paper. (we use it too for consistency)
         self.d_model = self.n_heads * self.d_k # (is always equal to self.n_units in our case.)
@@ -415,11 +425,11 @@ class MultiHeadedAttention(nn.Module):
         self.dropout = nn.Dropout(self.drop_prob)
         self.w_o = nn.Linear(self.n_units, self.n_units, bias=False)
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask=None):
+    def forward(self, query, key, value, mask=None):
         # TODO: implement the masked multi-head attention.
-        # query, key, and value all have size: (batch_size, seq_len, self.n_units, self.d_k)
+        # query, key, and value all have size: (batch_size, seq_len, self.n_units)
         # mask has size: (batch_size, seq_len, seq_len)
-        # As described in the .tex, apply input masking to the softmax
+        # As described in the .tex, apply input masking to the softmax 
         # generating the "attention values" (i.e. A_i in the .tex)
         # Also apply dropout to the attention values.
         batch_size = query.size()[0]
@@ -442,7 +452,6 @@ class MultiHeadedAttention(nn.Module):
             y[t] = out
         return y
 
-
 # ----------------------------------------------------------------------------------
 # The encodings of elements of the input sequence
 
@@ -453,7 +462,7 @@ class WordEmbedding(nn.Module):
         self.n_units = n_units
 
     def forward(self, x):
-        #print (x)
+        # print (x)
         return self.lut(x) * math.sqrt(self.n_units)
 
 
@@ -461,7 +470,7 @@ class PositionalEncoding(nn.Module):
     def __init__(self, n_units, dropout, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
-
+        
         # Compute the positional encodings once in log space.
         pe = torch.zeros(max_len, n_units)
         position = torch.arange(0, max_len).unsqueeze(1).float()
@@ -471,11 +480,12 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
-
+        
     def forward(self, x):
-        x = x + Variable(self.pe[:, :x.size(1)],
+        x = x + Variable(self.pe[:, :x.size(1)], 
                          requires_grad=False)
         return self.dropout(x)
+
 
 
 # ----------------------------------------------------------------------------------
@@ -488,26 +498,22 @@ class TransformerBlock(nn.Module):
         self.size = size
         self.self_attn = self_attn
         self.feed_forward = feed_forward
-        self.sublayer = clones(
-            ResidualSkipConnectionWithLayerNorm(size, dropout), 2)
-
+        self.sublayer = clones(ResidualSkipConnectionWithLayerNorm(size, dropout), 2)
+ 
     def forward(self, x, mask):
-        x = self.sublayer[0](x, lambda x: self.self_attn(
-            x, x, x, mask))  # apply the self-attention
-        # apply the position-wise MLP
-        return self.sublayer[1](x, self.feed_forward)
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask)) # apply the self-attention
+        return self.sublayer[1](x, self.feed_forward) # apply the position-wise MLP
 
 
 class TransformerStack(nn.Module):
     """
     This will be called on the TransformerBlock (above) to create a stack.
     """
-
-    def __init__(self, layer, n_blocks):  # layer will be TransformerBlock (below)
+    def __init__(self, layer, n_blocks): # layer will be TransformerBlock (below)
         super(TransformerStack, self).__init__()
         self.layers = clones(layer, n_blocks)
         self.norm = LayerNorm(layer.size)
-
+        
     def forward(self, x, mask):
         for layer in self.layers:
             x = layer(x, mask)
@@ -520,14 +526,13 @@ class FullTransformer(nn.Module):
         self.transformer_stack = transformer_stack
         self.embedding = embedding
         self.output_layer = nn.Linear(n_units, vocab_size)
-
+        
     def forward(self, input_sequence, mask):
         embeddings = self.embedding(input_sequence)
-        out = self.output_layer(self.transformer_stack(embeddings, mask))
-        return F.log_softmax(out, dim=-1)
+        return F.log_softmax(self.output_layer(self.transformer_stack(embeddings, mask)), dim=-1)
 
 
-def make_model(vocab_size, n_blocks=6,
+def make_model(vocab_size, n_blocks=6, 
                n_units=512, n_heads=16, dropout=0.1):
     "Helper: Construct a model from hyperparameters."
     c = copy.deepcopy
@@ -535,26 +540,12 @@ def make_model(vocab_size, n_blocks=6,
     ff = MLP(n_units, dropout)
     position = PositionalEncoding(n_units, dropout)
     model = FullTransformer(
-        transformer_stack=TransformerStack(
-            TransformerBlock(
-                n_units,
-                c(attn),
-                c(ff),
-                dropout
-            ),
-            n_blocks
-        ),
-        embedding=nn.Sequential(
-            WordEmbedding(
-                n_units,
-                vocab_size
-            ),
-            c(position)
-        ),
+        transformer_stack=TransformerStack(TransformerBlock(n_units, c(attn), c(ff), dropout), n_blocks),
+        embedding=nn.Sequential(WordEmbedding(n_units, vocab_size), c(position)),
         n_units=n_units,
         vocab_size=vocab_size
-    )
-
+        )
+    
     # Initialize parameters with Glorot / fan_avg.
     for p in model.parameters():
         if p.dim() > 1:
@@ -571,14 +562,12 @@ def subsequent_mask(size):
     subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('uint8')
     return torch.from_numpy(subsequent_mask) == 0
 
-
 class Batch:
     "Object for holding a batch of data with mask during training."
-
     def __init__(self, x, pad=0):
         self.data = x
         self.mask = self.make_mask(self.data, pad)
-
+    
     @staticmethod
     def make_mask(data, pad):
         "Create a mask to hide future words."
@@ -593,7 +582,6 @@ class Batch:
 
 class LayerNorm(nn.Module):
     "layer normalization, as in: https://arxiv.org/abs/1607.06450"
-
     def __init__(self, features, eps=1e-6):
         super(LayerNorm, self).__init__()
         self.a_2 = nn.Parameter(torch.ones(features))
@@ -611,7 +599,6 @@ class ResidualSkipConnectionWithLayerNorm(nn.Module):
     A residual connection followed by a layer norm.
     Note for code simplicity the norm is first as opposed to last.
     """
-
     def __init__(self, size, dropout):
         super(ResidualSkipConnectionWithLayerNorm, self).__init__()
         self.norm = LayerNorm(size)
@@ -626,7 +613,6 @@ class MLP(nn.Module):
     """
     This is just an MLP with 1 hidden layer
     """
-
     def __init__(self, n_units, dropout=0.1):
         super(MLP, self).__init__()
         self.w_1 = nn.Linear(n_units, 2048)
@@ -635,3 +621,4 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
+
