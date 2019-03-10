@@ -12,9 +12,7 @@ import matplotlib.pyplot as plt
 
 from typing import Tuple, List
 from itertools import zip_longest
-from utils import num_trainable_params
-
-from rnn_cells import BaseRNNCell, VanillaRNNCell, GRURNNCell
+from typing import Tuple, List
 
 
 device = torch.device("cpu")
@@ -48,6 +46,103 @@ print(device)
 # You should not modify the interals of the Transformer
 # except where indicated to implement the multi-head
 # attention.
+
+
+def glorot_init(weight: torch.Tensor) -> None:
+    nn.init.xavier_normal_(weight)
+
+def one_hot_encoding(x: torch.Tensor, vocab_size: int) -> torch.Tensor:
+    """
+    Returns the one-hot encoded version of the inputs.
+
+    Args:
+        x (torch.Tensor): Integer Tensor of size [batch_size, seq_len]
+        vocab_size (int): The size of the vocabulary.
+    Returns:
+        a one-hot tensor of size [batch_size, seq_len, vocab_size]
+    """
+    x = x.type(torch.long)
+    batch_size, seq_len = x.size()
+    output = torch.zeros([batch_size, seq_len, vocab_size])
+    for i, sequence in enumerate(x):
+        for j, token_index in enumerate(sequence):
+            output[i][j][token_index] = 1
+    return output
+
+
+def num_trainable_params(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+class BaseRNNCell(torch.nn.Module):
+    """
+    Base class for VanillaRNNCell and GRUCell.
+
+    Both classes have the same parameters and method docstrings documentation.
+    Having a base class keeps common things in only one place. 
+    """
+    def __init__(self, input_size: int, hidden_size: int, dropout_keep_prob: float = 1.0):
+        """
+        Creates a Simple-RNN cell
+
+        input_size:     the size of the input
+        hidden_size:    the number of hidden units, (also the size of the hidden_state tensor)
+        """
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.dropout_keep_prob = dropout_keep_prob
+
+        self._dropout = nn.Dropout(1-self.dropout_keep_prob)
+
+
+    def forward(self, x: torch.Tensor, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Computes the logits and next state for a given batch of inputs and an initial state.
+
+        Params:
+            x (torch.Tensor): Tensor of size [batch_size, input_size]
+            hidden_state (torch.Tensor): Tensor of size [1, hidden_size]. Is used as the initial state.
+
+        Returns:
+            - Logits (torch.Tensor): Tensor of shape [batch_size, output_size]. No activation is used.
+            - state (torch.Tensor): Tensor of shape [1, hidden_size], the hidden state after the timestep.
+        """
+        raise NotImplementedError("Use either VanillaRNNCell or GRUCell")
+
+
+class VanillaRNNCell(BaseRNNCell):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.linear_x = nn.Linear(self.input_size, self.hidden_size, bias=False)
+        self.linear_h = nn.Linear(self.hidden_size, self.hidden_size)
+    
+    def forward(self, x: torch.Tensor, hidden_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self._dropout(x)
+        h = torch.tanh(self.linear_x(x) + self.linear_h(hidden_state))
+        return h
+
+
+class GRURNNCell(BaseRNNCell):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._reset = nn.Linear(self.input_size, self.hidden_size)
+        self._reset_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+        self._forget = nn.Linear(self.input_size, self.hidden_size)
+        self._forget_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+        self._state = nn.Linear(self.input_size, self.hidden_size)
+        self._state_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+    def forward(self, x_t: torch.Tensor, h_t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x_t = self._dropout(x_t)
+        r_t = torch.sigmoid(self._reset(x_t) + self._reset_u(h_t))
+        z_t = torch.sigmoid(self._forget(x_t) + self._forget_u(h_t))
+        h_t_tilda = torch.tanh(self._state(x_t) + self._state_u(r_t * h_t))
+
+        h_t = (1 - z_t) * h_t + z_t * h_t_tilda
+        return h_t
 
 
 # Problem 1
@@ -112,10 +207,12 @@ class RNNBase(nn.Module):
             cell_type(
                 input_size=self.emb_size if i == 0 else self.hidden_size,
                 hidden_size=self.hidden_size,
-                output_size=self.hidden_size if i < self.num_layers - 1 else self.vocab_size,
-                dropout_keep_prob=self.dp_keep_prob if i < self.num_layers - 1 else 1.0
+                dropout_keep_prob=self.dp_keep_prob, 
             ) for i in range(self.num_layers)
         ])
+        self.output_dropout = nn.Dropout()
+        self.output_dense = nn.Linear(self.hidden_size, self.vocab_size)
+
         self.init_weights()
 
         print("total number of params:", num_trainable_params(self))
@@ -126,11 +223,10 @@ class RNNBase(nn.Module):
         # and output biases to 0 (in place). The embeddings should not use a bias vector.
         # Initialize all other (i.e. recurrent and linear) weights AND biases uniformly 
         # in the range [-k, k] where k is the square root of 1/hidden_size
-        for module in self.modules():
-            if hasattr(module, "weight") and module.weight is not None:
-                nn.init.xavier_normal_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                nn.init.zeros_(module.bias)
+        nn.init.uniform_(self.embedding_layer.weight, -0.1, 0.1)
+        nn.init.uniform_(self.output_dense.weight, -0.1, 0.1)
+        nn.init.zeros_(self.output_dense.bias)
+        # NOTE: the default initialization done by pytorch is ok for the other layers.
 
     def init_hidden(self):
         # TODO ========================
@@ -181,53 +277,23 @@ class RNNBase(nn.Module):
         logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size).to(device)
         embeddings = self.embedding_layer(inputs).to(device)
 
-        h_t: List[torch.Tensor] = [None] * self.num_layers
+        initial_state = hidden
+
+        states: List[torch.Tensor] = [None] * self.num_layers
         for t, x in enumerate(embeddings):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
-                h_prev = hidden[layer] if t == 0 else h_t[layer-1]
-                x, h_t[layer] = rnn_cell(x, h_prev)
-            logits[t] = x
-        final_states = torch.stack(h_t)
+                layer_input = x if layer == 0  else states[layer-1]
+                old_state = initial_state[layer] if t == 0 else states[layer]
+                
+                new_state = rnn_cell(layer_input, old_state)
+                states[layer] = new_state
+
+            # feed the hidden state of the last recurrent layer into a dropout-dense layer.  
+            logits[t] = self.output_dense(self.output_dropout(states[-1]))
+            
+        final_states = torch.stack(states)
         return logits, final_states
     
-    def forward_detailed(self, inputs: torch.Tensor, hidden: torch.Tensor):
-        """
-        Equivalent to 'forward', but the intermediate outputs and hidden states are kept in variables.
-        NOTE: Perhaps this could be useful for part 4 or 5.
-        TODO: The backward-pass is having some issues here, because of item assignments inside a tensor.
-        """
-        h_0 = hidden
-        # holds all the intermediate hidden states
-        H = torch.Tensor(self.seq_len, self.num_layers,
-                         self.batch_size, self.hidden_size)
-        # Holds the intermediate layer outputs
-        Y = torch.Tensor(self.seq_len, self.num_layers-1,
-                         self.batch_size, self.hidden_size)
-        # Tensor to hold the outputs of the last layer.
-        logits = torch.Tensor(self.seq_len, self.batch_size, self.vocab_size)
-
-        embeddings = self.embedding_layer(inputs)
-        for t, x_t in enumerate(embeddings):
-            for layer, rnn_cell in enumerate(self.recurrent_layers):
-                # the layer input is either the input sequence or the previous layer's output.
-                x = x_t if layer == 0 else Y[t][layer-1]
-                # the previous state is either the initial state or the state at last timestep.
-                prev_state = h_0[layer] if t == 0 else H[t-1][layer]
-
-                # compute the new outputs and state
-                output, new_state = rnn_cell(x, prev_state)
-                H[t][layer] = new_state
-
-                if layer == self.num_layers - 1:
-                    # last layer
-                    logits[t] = output
-                else:
-                    # intermediate layer: save it in Y
-                    Y[t][layer] = output
-
-        final_states = H[-1]
-        return logits, final_states
-
     def generate(self, input, hidden, generated_seq_len):
         # TODO ========================
         # Compute the forward pass, as in the self.forward method (above).
@@ -259,7 +325,7 @@ class RNNBase(nn.Module):
         for t in range(generated_seq_len):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 # compute the new outputs and state
-                x, hidden[layer] = rnn_cell(x, hidden[layer])
+                hidden[layer] = rnn_cell(x, hidden[layer])
 
             # TODO: not sure exactly if this is correct or not.
             prob = torch.softmax(x, dim=1)
