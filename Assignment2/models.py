@@ -14,6 +14,7 @@ from typing import Tuple, List
 from itertools import zip_longest
 from typing import Tuple, List
 
+import sys
 
 device = torch.device("cpu")
 # Use the GPU if you have one
@@ -285,7 +286,7 @@ class RNNBase(nn.Module):
                 layer_input = x if layer == 0  else states[layer-1]
                 old_state = initial_state[layer] if t == 0 else states[layer]
                 
-                new_state = rnn_cell(layer_input, old_state)
+                new_state = rnn_cell(layer_input, old_state) #Forward pass
                 states[layer] = new_state
 
             # feed the hidden state of the last recurrent layer into a dropout-dense layer.  
@@ -325,7 +326,7 @@ class RNNBase(nn.Module):
         for t in range(generated_seq_len):
             for layer, rnn_cell in enumerate(self.recurrent_layers):
                 # compute the new outputs and state
-                hidden[layer] = rnn_cell(x, hidden[layer])
+                hidden[layer] = rnn_cell(x, hidden[layer]) #Forward pass
 
             # TODO: not sure exactly if this is correct or not.
             prob = torch.softmax(x, dim=1)
@@ -470,6 +471,7 @@ class MultiHeadedAttention(nn.Module):
         # This requires the number of n_heads to evenly divide n_units.
         assert n_units % n_heads == 0
         self.n_units = n_units 
+        self.n_heads = n_heads
 
         # TODO: create/initialize any necessary parameters or layers
         # Initialize all weights and biases uniformly in the range [-k, k],
