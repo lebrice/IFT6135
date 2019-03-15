@@ -209,7 +209,7 @@ class RNNBase(nn.Module):
                 dropout_keep_prob=self.dp_keep_prob, 
             ) for i in range(self.num_layers)
         ])
-        self.output_dropout = nn.Dropout()
+        self.output_dropout = nn.Dropout(p=1-dp_keep_prob)
         self.output_dense = nn.Linear(self.hidden_size, self.vocab_size)
 
         self.init_weights()
