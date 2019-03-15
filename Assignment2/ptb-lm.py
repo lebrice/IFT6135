@@ -490,7 +490,8 @@ print('\nDONE\n\nSaving learning curves to '+lc_path)
 np.save(lc_path, {'train_ppls':train_ppls, 
                   'val_ppls':val_ppls, 
                   'train_losses':train_losses,
-                  'val_losses':val_losses})
+                  'val_losses':val_losses,
+                  'times': times})
 # NOTE ==============================================
 # To load these, run 
 # >>> x = np.load(lc_path)[()]
