@@ -7,7 +7,6 @@ import math
 import copy
 import time
 from torch.autograd import Variable
-import matplotlib.pyplot as plt
 
 
 from typing import Tuple, List
