@@ -7,6 +7,7 @@ import math
 import copy
 import time
 from torch.autograd import Variable
+import matplotlib.pyplot as plt
 
 
 from typing import Tuple, List
@@ -431,9 +432,9 @@ class AttentionHead(nn.Module):
         self.d_k = d_k
         self.d_v = d_v
 
-        self.w_q = nn.Linear(self.d_model, self.d_k, bias=False)
-        self.w_k = nn.Linear(self.d_model, self.d_k, bias=False)
-        self.w_v = nn.Linear(self.d_model, self.d_v, bias=False)
+        self.w_q = nn.Linear(self.d_model, self.d_k)
+        self.w_k = nn.Linear(self.d_model, self.d_k)
+        self.w_v = nn.Linear(self.d_model, self.d_v)
 
     def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None) -> torch.Tensor:
         """
@@ -460,7 +461,7 @@ class MultiHeadedAttention(nn.Module):
     def __init__(self, n_heads, n_units, dropout=0.1):
         """
         n_heads: the number of attention heads
-        n_units: the number of output units
+        n_units: the number of input and output units
         dropout: probability of DROPPING units
         """
         super(MultiHeadedAttention, self).__init__()
@@ -477,6 +478,7 @@ class MultiHeadedAttention(nn.Module):
         # where k is the square root of 1/n_units.
         # Note: the only Pytorch modules you are allowed to use are nn.Linear 
         # and nn.Dropout
+        # ETA: you can also use softmax
         self.drop_prob = dropout
         self.d_v = self.d_k
         # d_model is used in the paper. (we use it too for consistency)
@@ -490,11 +492,12 @@ class MultiHeadedAttention(nn.Module):
             ) for i in range(self.n_heads)
         ])
         self.dropout = nn.Dropout(self.drop_prob)
-        self.w_o = nn.Linear(self.n_units, self.n_units, bias=False)
+        self.w_o = nn.Linear(self.n_units, self.n_units)
 
     def forward(self, query, key, value, mask=None):
         # TODO: implement the masked multi-head attention.
-        # query, key, and value all have size: (batch_size, seq_len, self.n_units)
+        # query, key, and value correspond to Q, K, and V in the latex, and
+        # they all have size: (batch_size, seq_len, self.n_units)
         # mask has size: (batch_size, seq_len, seq_len)
         # As described in the .tex, apply input masking to the softmax 
         # generating the "attention values" (i.e. A_i in the .tex)
