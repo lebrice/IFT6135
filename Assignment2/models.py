@@ -451,7 +451,7 @@ class AttentionHead(nn.Module):
         x = x / torch.sqrt(torch.Tensor([self.d_k]).to(q.device))
         if mask is not None:
             x = x * mask.float()
-        x = torch.softmax(x, dim=0)
+        x = torch.softmax(x, dim=1)
         y = torch.mm(x, v)
         return y
 
