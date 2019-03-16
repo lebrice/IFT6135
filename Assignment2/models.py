@@ -507,10 +507,6 @@ class MultiHeadedAttention(nn.Module):
         batch_size = query.size()[0]
         seq_len = query.size()[1]
         
-        # TODO (Fabrice): Right now, there is no fourth dimension in query,key,value (as then mention above)
-        # This is because in our case H (n_layers = 16) is equal to the number of output features (n_units = 16)
-        # It might be important that we make sure that this works even with dk > 1, (H < n_units). 
-
         Q, K, V, M = query, key, value, mask
         # print(Q.size(), K.size(), V.size(), M.size())
         y = torch.Tensor(batch_size, seq_len, self.n_units).to(query.device)
