@@ -436,6 +436,8 @@ class AttentionHead(nn.Module):
         self.w_k = nn.Linear(self.d_model, self.d_k)
         self.w_v = nn.Linear(self.d_model, self.d_v)
 
+        self.softmax = nn.Softmax(dim=2)
+
     def forward(self, Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None) -> torch.Tensor:
         """
         Performs the (matrix-version) of the scaled dot-product attention.
@@ -447,12 +449,12 @@ class AttentionHead(nn.Module):
         k = self.w_k(K)
         v = self.w_v(V)
         x: torch.Tensor
-        x = torch.mm(q, k.transpose(0, 1))
+        x = torch.matmul(q, k.permute(0, 2, 1))
         x = x / torch.sqrt(torch.Tensor([self.d_k]).to(q.device))
         if mask is not None:
             x = x * mask.float()
-        x = torch.softmax(x, dim=1)
-        y = torch.mm(x, v)
+        x = self.softmax(x)
+        y = torch.matmul(x, v)
         return y
 
 
@@ -512,15 +514,15 @@ class MultiHeadedAttention(nn.Module):
         Q, K, V, M = query, key, value, mask
         # print(Q.size(), K.size(), V.size(), M.size())
         y = torch.Tensor(batch_size, seq_len, self.n_units).to(query.device)
-        for t, (q,k,v,m) in enumerate(zip(Q,K,V,M)):
-            # TODO: It feels a bit weird that we have to iterate over the batch dimension like this, not sure why. (but it works.)
-            h = torch.cat([
-                attention_head(q, k, v, m) for attention_head in self.attention_heads
+
+        h = torch.cat([
+                attention_head(Q, K, V, M) for attention_head in self.attention_heads
             ], dim=-1)
-            out = self.dropout(h)
-            out = self.w_o(out)
-            y[t] = out
-        return y
+        
+        out = self.dropout(h)
+        out = self.w_o(out)
+        
+        return out
 
 # ----------------------------------------------------------------------------------
 # The encodings of elements of the input sequence
