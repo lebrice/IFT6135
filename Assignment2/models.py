@@ -497,6 +497,22 @@ class MultiHeadedAttention(nn.Module):
         self.dropout = nn.Dropout(self.drop_prob)
         self.w_o = nn.Linear(self.n_units, self.n_units)
 
+        self.init_weights()
+
+    def init_weights(self):
+        k = 1/self.d_model
+        k = math.sqrt(k)
+
+        #Initializing the weight and biais of the output w_o
+        nn.init.uniform_(self.w_o.weight, -k, k)
+        nn.init.uniform_(self.w_o.bias, -k, k)
+        
+        #Initializing the weights and biaises of the heads
+        for m in self.attention_heads.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.uniform_(m.weight, -k, k)
+                nn.init.uniform_(m.bias, -k, k)
+
     def forward(self, query, key, value, mask=None):
         # TODO: implement the masked multi-head attention.
         # query, key, and value correspond to Q, K, and V in the latex, and
