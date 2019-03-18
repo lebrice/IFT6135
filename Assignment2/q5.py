@@ -164,7 +164,8 @@ def run_epoch(model, data, is_train=False, lr=1.0):
         iters += model.seq_len
     return np.exp(costs / iters), losses / num_batches
 
-for model_type in ['RNN', 'GRU', 'TRANSFORMER']:
+def get_best_model(model_type: str) -> nn.Module:
+    model: nn.Module = None
     if model_type == 'RNN':
         model = RNN(emb_size=200, hidden_size=1500, 
                         seq_len=35, batch_size=20,
@@ -184,17 +185,25 @@ for model_type in ['RNN', 'GRU', 'TRANSFORMER']:
         model.seq_len=35
         model.vocab_size=vocab_size
         model.load_state_dict(torch.load('./4_1_c/best_params.pt'))
+    return model
 
-    model = model.to(device)
+def main():        
+    for model_type in ['RNN', 'GRU', 'TRANSFORMER']:
+        
+        model = get_best_model(model_type)
+        model = model.to(device)
 
-    loss_fn = nn.CrossEntropyLoss(reduction='none')
+        loss_fn = nn.CrossEntropyLoss(reduction='none')
 
-    _, losses = run_epoch(model, valid_data)
+        _, losses = run_epoch(model, valid_data)
 
-    losses = losses.detach().cpu().numpy()
-    plt.clf()
-    plt.plot(range(len(losses)), losses)
-    plt.title('Average loss at each time-step within validation sequences')
-    plt.xlabel('Time-step')
-    plt.ylabel('Average loss')
-    plt.savefig(f'Q5_1_loss_at_time_steps_{model_type}.jpg')
+        losses = losses.detach().cpu().numpy()
+        plt.clf()
+        plt.plot(range(len(losses)), losses)
+        plt.title('Average loss at each time-step within validation sequences')
+        plt.xlabel('Time-step')
+        plt.ylabel('Average loss')
+        plt.savefig(f'Q5_1_loss_at_time_steps_{model_type}.jpg')
+
+if __name__ == "__main__":
+    main()
