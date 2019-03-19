@@ -171,13 +171,13 @@ def get_best_model(model_type: str) -> nn.Module:
                         seq_len=35, batch_size=20,
                         vocab_size=vocab_size, num_layers=2, 
                         dp_keep_prob=0.35)
-        model.load_state_dict(torch.load('./4_1_a/best_params.pt'))
+        model.load_state_dict(torch.load('./4_1_a/best_params.pt', map_location=device))
     elif model_type == 'GRU':
         model = GRU(emb_size=200, hidden_size=1500, 
                 seq_len=35, batch_size=20,
                 vocab_size=vocab_size, num_layers=2, 
                 dp_keep_prob=0.35)
-        model.load_state_dict(torch.load('./4_1_b/best_params.pt'))
+        model.load_state_dict(torch.load('./4_1_b/best_params.pt', map_location=device))
     elif model_type == 'TRANSFORMER':
         model = TRANSFORMER(vocab_size=vocab_size, n_units=512, 
                             n_blocks=6, dropout=1.-0.9)
