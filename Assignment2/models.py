@@ -64,7 +64,7 @@ def one_hot_encoding(x: torch.Tensor, vocab_size: int) -> torch.Tensor:
     """
     x = x.type(torch.long)
     batch_size, seq_len = x.size()
-    output = torch.zeros([batch_size, seq_len, vocab_size])
+    output = torch.zeros([batch_size, seq_len, vocab_size], dtype=torch.long)
     for i, sequence in enumerate(x):
         for j, token_index in enumerate(sequence):
             output[i][j][token_index] = 1
@@ -213,7 +213,6 @@ class RNNBase(nn.Module):
         ])
         self.output_dropout = nn.Dropout(p=1-dp_keep_prob)
         self.output_dense = nn.Linear(self.hidden_size, self.vocab_size)
-
         self.init_weights()
 
         print("total number of params:", num_trainable_params(self))
@@ -321,20 +320,45 @@ class RNNBase(nn.Module):
                         shape: (generated_seq_len, batch_size)
         """
         # Tensor to hold the outputs.
-        samples = torch.Tensor(self.generated_seq_len, self.batch_size)
-        x = self.embedding_layer(input)
-        for t in range(generated_seq_len):
-            for layer, rnn_cell in enumerate(self.recurrent_layers):
-                # compute the new outputs and state
-                hidden[layer] = rnn_cell(x, hidden[layer]) #Forward pass
 
-            # TODO: not sure exactly if this is correct or not.
-            prob = torch.softmax(x, dim=1)
-            print(prob)
-            values, indices = torch.max(prob, dim=1)
-            samples[t] = indices
-            x = self.embedding_layer(indices)
-        return samples
+        initial_state = hidden
+        tokens = input
+
+        states: List[torch.Tensor] = [None] * self.num_layers
+        generated_tokens: List[torch.Tensor] = [None] * generated_seq_len
+
+        for t in range(generated_seq_len):
+            embeddings = self.embedding_layer(tokens)
+            for layer, rnn_cell in enumerate(self.recurrent_layers):
+                layer_input = embeddings if layer == 0 else states[layer-1]
+                old_state = initial_state[layer] if t == 0 else states[layer]
+                
+                states[layer] = rnn_cell(layer_input, old_state) #Forward pass
+            # feed the hidden state of the last recurrent layer into a dropout-dense layer.  
+            logits = self.output_dense(self.output_dropout(states[-1]))
+            # NOTE: we use the logits argument, no need to do softmax ourselves.
+            tokens = torch.distributions.Categorical(logits=logits).sample()
+            # save the tokens (words) generated at this timestep.
+            generated_tokens[t] = tokens
+
+        return torch.stack(generated_tokens)
+
+
+        # # Tensor to hold the outputs.
+        # samples = torch.Tensor(generated_seq_len, self.batch_size)
+        # x = self.embedding_layer(input)
+        # for t in range(generated_seq_len):
+        #     for layer, rnn_cell in enumerate(self.recurrent_layers):
+        #         # compute the new outputs and state
+        #         hidden[layer] = rnn_cell(x, hidden) #Forward pass
+
+        #     # TODO: not sure exactly if this is correct or not.
+        #     prob = torch.softmax(x, dim=1)
+        #     print(prob)
+        #     values, indices = torch.max(prob, dim=1)
+        #     samples[t] = indices
+        #     x = self.embedding_layer(indices)
+        # return samples
 
 
 # Problem 1
