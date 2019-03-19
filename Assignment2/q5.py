@@ -134,6 +134,7 @@ def run_epoch(model, data, is_train=False, lr=1.0):
     iters = 0
     losses = torch.zeros(model.seq_len, device=device)
     num_batches = 0
+    loss_fn = nn.CrossEntropyLoss(reduction='none')
 
     # LOOP THROUGH MINIBATCHES
     for step, (x, y) in enumerate(ptb_iterator(data, model.batch_size, model.seq_len)):
@@ -149,15 +150,15 @@ def run_epoch(model, data, is_train=False, lr=1.0):
             hidden = repackage_hidden(hidden)
             outputs, hidden = model(inputs, hidden)
 
-        targets = torch.from_numpy(y.astype(np.int64)).transpose(0, 1).contiguous().to(device)
-        tt = torch.squeeze(targets.view(model.batch_size, model.seq_len))
+        targets = torch.from_numpy(y.astype(np.int64)).contiguous().to(device)
+        tt = torch.squeeze(targets)
 
         # LOSS COMPUTATION
         # This line currently averages across all the sequences in a mini-batch 
         # and all time-steps of the sequences.
         # For problem 5.3, you will (instead) need to compute the average loss 
         # at each time-step separately. 
-        loss = loss_fn(outputs.contiguous().view(-1, model.vocab_size, model.seq_len), tt)
+        loss = loss_fn(outputs.contiguous().permute(1, 2, 0), tt)
         # costs += loss.data.item() * model.seq_len
         losses += loss.detach().mean(0)
         num_batches += 1
@@ -192,8 +193,6 @@ def main():
         
         model = get_best_model(model_type)
         model = model.to(device)
-
-        loss_fn = nn.CrossEntropyLoss(reduction='none')
 
         _, losses = run_epoch(model, valid_data)
 
