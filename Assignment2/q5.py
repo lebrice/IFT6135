@@ -199,7 +199,7 @@ def main():
         losses = losses.detach().cpu().numpy()
         plt.clf()
         plt.plot(range(len(losses)), losses)
-        plt.title('Average loss at each time-step within validation sequences')
+        plt.title(f'Average loss at each time-step within validation sequences for {model_type} model')
         plt.xlabel('Time-step')
         plt.ylabel('Average loss')
         plt.savefig(f'Q5_1_loss_at_time_steps_{model_type}.jpg')
