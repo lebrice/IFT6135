@@ -215,6 +215,8 @@ class RNNBase(nn.Module):
         self.output_dense = nn.Linear(self.hidden_size, self.vocab_size)
         self.init_weights()
 
+        self.hidden_states = [None] * seq_len
+
         print("total number of params:", num_trainable_params(self))
 
     def init_weights(self):
@@ -290,6 +292,8 @@ class RNNBase(nn.Module):
 
             # feed the hidden state of the last recurrent layer into a dropout-dense layer.  
             logits[t] = self.output_dense(self.output_dropout(states[-1]))
+
+            self.hidden_states[t] = states[-1]
             
         final_states = torch.stack(states)
         return logits, final_states
