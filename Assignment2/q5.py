@@ -187,22 +187,3 @@ def get_best_model(model_type: str) -> nn.Module:
         model.vocab_size=vocab_size
         model.load_state_dict(torch.load('./4_1_c/best_params.pt'))
     return model
-
-def main():        
-    for model_type in ['RNN', 'GRU', 'TRANSFORMER']:
-        
-        model = get_best_model(model_type)
-        model = model.to(device)
-
-        _, losses = run_epoch(model, valid_data)
-
-        losses = losses.detach().cpu().numpy()
-        plt.clf()
-        plt.plot(range(len(losses)), losses)
-        plt.title(f'Average loss at each time-step within validation sequences for {model_type} model')
-        plt.xlabel('Time-step')
-        plt.ylabel('Average loss')
-        plt.savefig(f'Q5_1_loss_at_time_steps_{model_type}.jpg')
-
-if __name__ == "__main__":
-    main()
