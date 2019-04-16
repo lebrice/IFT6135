@@ -58,7 +58,6 @@ def wasserstein_distance(p, q):
         nn.Linear(1, 512),
         nn.Linear(512, 256),
         nn.Linear(256, 1),
-        nn.Sigmoid()
     )
 
     cuda = torch.cuda.is_available()
