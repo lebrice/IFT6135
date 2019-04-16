@@ -1,5 +1,6 @@
 import torch
 from torch import nn, optim
+import numpy as np
 
 from mnist_loader import get_data_loader
 
@@ -71,20 +72,27 @@ def ELBO(output, target, mu, logvar):
     elbo += 0.5 * torch.sum(1 + logvar - mu.pow(2) - torch.exp(logvar))
     return elbo / output.size(0)
 
-def validate(model, valid, device):
+def validate(model, valid, device, method='elbo'):
+    model.eval()
     nb_minibatch = 0
-    elbo = 0
-    for x in valid:
+    metric = 0
+    for i, x in enumerate(valid):
         x = x.to(device)
         y, mu, logvar = model(x)
-        elbo += ELBO(y, x, mu, logvar) 
+
+        if method == 'elbo':
+            metric += ELBO(y, x, mu, logvar)
+        else:
+            std = torch.exp(logvar / 2)[:, None, :].repeat(1, 200, 1)
+            z_samples = mu[:, None, :] + std * torch.randn_like(std)
+            metric_val = torch.mean(importance_sample_vae(model, x.view(x.size(0), -1), z_samples, device))
+            print(f"{i} / {len(valid)} : {metric_val}")
+            metric += metric_val
+
         nb_minibatch += 1
-    return elbo / nb_minibatch
+    return metric / nb_minibatch
 
-if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"Running on {device}")
-
+def part1(device):
     train, valid, test = get_data_loader("binarized_mnist", 64)
 
     vae = VAE()
@@ -97,6 +105,7 @@ if __name__ == "__main__":
         print(f"------- EPOCH {epoch} --------")
 
         for i, x in enumerate(train):
+            vae.train()
             optimizer.zero_grad()
 
             x = x.to(device)
@@ -109,5 +118,55 @@ if __name__ == "__main__":
 
             if (i + 1) % 100 == 0:
                 with torch.no_grad():
-                    total_elbo = validate(vae, valid, device)
-                print(f"Training example {i + 1} / {len(train)}. Validation ELBO: {total_elbo}")
+                    valid_elbo = validate(vae, valid, device)
+                print(f"Training example {i + 1} / {len(train)}. Validation ELBO: {valid_elbo}")
+
+    torch.save(vae.state_dict(), 'vae_save.pth')
+
+def importance_sample_vae(vae, x, z, device):
+    """
+    x: [M, D]
+    z: [M, K, L]
+    M: batch size (64)
+    K: number of importance  (200)
+    D: Input dimension (784)
+    L: Latent code dimension (100)
+    """
+    assert x.dim() == 2 and z.dim() == 3
+    M = x.size(0)
+    K = z.size(1)
+    D = x.size(1)
+    L = z.size(2)
+    
+    z_flattened = z.view(-1, L)
+    p_x_given_z = torch.mean(vae.decoder(z_flattened).view(M, K, -1), dim=-1).unsqueeze(-1) # (64, 200, 784) -> (64, 200, 1) (M, K, 1)
+
+    q_z_given_x, _ = vae.encoder(x.view(M, 1, int(np.sqrt(D)), -1)) # Just take the mean?
+    q_z_given_x = q_z_given_x[:, None, :] # (64, 1, 100) (M, 1, L)
+
+    normal = torch.distributions.normal.Normal(torch.tensor([0.0], device=device), torch.tensor([1.0], device=device))
+    p_z = normal.log_prob(z) # Compare to a unit gaussian or to something in the NN? (64, 200, 100) (M, K, L)
+
+    print(f"p_x_given_z --> max: {p_x_given_z.max()}, min: {p_x_given_z.min()}, mean: {p_x_given_z.mean()}")
+    print(f"p_z --> max: {p_z.max()}, min: {p_z.min()}, mean: {p_z.mean()}")
+    print(f"q_z_given_x --> max: {q_z_given_x.max()}, min: {q_z_given_x.min()}, mean: {q_z_given_x.mean()}")
+    return torch.log(1 / K * torch.sum(torch.mean(p_x_given_z * p_z / q_z_given_x, dim=2), dim=1))
+
+
+def part2(device):
+    train, valid, test = get_data_loader("binarized_mnist", 64)
+
+    vae = VAE()
+    vae.load_state_dict(torch.load('vae_save.pth', map_location=device))
+    vae.eval()
+    vae = vae.to(device)
+
+    with torch.no_grad():
+        metric = validate(vae, valid, device, method='importance')
+        print(metric)
+
+if __name__ == "__main__":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Running on {device}")
+
+    part2(device)
