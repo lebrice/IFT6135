@@ -69,7 +69,7 @@ class VAE(nn.Module):
 def ELBO(output, target, mu, logvar):
     elbo = -torch.nn.functional.binary_cross_entropy(output, target)
     elbo += 0.5 * torch.sum(1 + logvar - mu.pow(2) - torch.exp(logvar))
-    return loelboss
+    return elbo
 
 def validate(model, valid, device):
     elbo = 0
