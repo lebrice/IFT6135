@@ -67,17 +67,19 @@ class VAE(nn.Module):
         return self.decoder(z), mu, logvar
 
 def ELBO(output, target, mu, logvar):
-    elbo = -torch.nn.functional.binary_cross_entropy(output, target)
+    elbo = -torch.nn.functional.binary_cross_entropy(output, target, reduction='sum')
     elbo += 0.5 * torch.sum(1 + logvar - mu.pow(2) - torch.exp(logvar))
-    return elbo
+    return elbo / output.size(0)
 
 def validate(model, valid, device):
+    nb_minibatch = 0
     elbo = 0
     for x in valid:
         x = x.to(device)
         y, mu, logvar = model(x)
-        elbo += ELBO(y, x, mu, logvar)
-    return elbo
+        elbo += ELBO(y, x, mu, logvar) 
+        nb_minibatch += 1
+    return elbo / nb_minibatch
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -105,7 +107,7 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
 
-            if (i + 1) % 10 == 0:
+            if (i + 1) % 100 == 0:
                 with torch.no_grad():
                     total_elbo = validate(vae, valid, device)
                 print(f"Training example {i + 1} / {len(train)}. Validation ELBO: {total_elbo}")
