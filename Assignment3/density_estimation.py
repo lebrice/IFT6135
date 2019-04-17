@@ -49,15 +49,21 @@ f_0 = distribution3(batch_size=512) # standard gaussian
 f_1 = distribution4(batch_size=512) # modified 'unknown' distribution
 
 print("Training discriminator...")
-discriminator = get_optimal_discriminator(f_0, f_1)
+discriminator = get_optimal_discriminator(f_1, f_0, maxsteps=1_000, threshold=1e-3)
+
 
 def estimate_density(xx):
     d_x = discriminator(xx)
-    factor = d_x / (1 - d_x)
-    f_0_x = N(xx)
-    f_0_x = np.reshape(f_0_x, [-1, 1])
-    estimate = f_0_x * factor
-    estimate = np.reshape(estimate, xx.shape)
+    # prevent division by zero:
+    d_x = np.maximum(d_x, 1e-8)
+    d_x = np.minimum(d_x, 1 - 1e-8)
+
+    base_density = N(xx)
+    scaling_factor = (1 - d_x) / d_x
+    
+    # plt.plot(xx, scaling_factor, color="red")
+
+    estimate = base_density * scaling_factor
     return estimate
 
 ############### plotting things
@@ -84,7 +90,8 @@ plt.savefig("./q1_4_2.png")
 
 
 
-
+if __name__ == "__main__":
+    plt.show()
 
 
 
