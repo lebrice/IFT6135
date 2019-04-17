@@ -58,7 +58,7 @@ class GAN(nn.Module):
         z = random_interpolation(reals, fakes)
         z.requires_grad = True
 
-        output = disc(z)
+        output = self.discriminator(z)
         gradients = torch.autograd.grad(
             outputs=output,
             inputs=z,
