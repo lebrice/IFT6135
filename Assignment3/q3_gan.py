@@ -34,17 +34,30 @@ class GAN(nn.Module):
         self.discriminator = Discriminator()
 
         self.lambda_coefficient = 10.0
+        self.batch_size = None
 
-    def loss(self, reals: torch.Tensor, latents: torch.Tensor = None) -> torch.FloatTensor:
+        # TODO: Tune this hyperparameter
+        self.d_steps_per_g_step = 3
+
+        self.training_the_discriminator = True
+
+    def g_loss(self) -> torch.FloatTensor:
+        assert self.batch_size is not None, "d_loss should have been called before g_loss"
+        latents = torch.randn([self.batch_size, self.latent_size])
+        fakes = self.generator(latents)
+        fakes_scores = self.discriminator(fakes)
+        return - fakes_scores.mean()
+
+    def d_loss(self, reals: torch.Tensor) -> torch.FloatTensor:
         """
         WGAN-GP Loss
         """
-        if latents is None:
-            latents = torch.randn([reals.shape[0], self.latent_size])
+        self.batch_size = reals.shape[0]
+        latents = torch.randn([self.batch_size, self.latent_size])
         fakes = self.generator(latents)
         fakes_score = self.discriminator(fakes)
         reals_score = self.discriminator(reals)
-        loss = (reals_score - fakes_score).mean()
+        loss = (fakes_score - reals_score).mean()
         
         grad_penalty = self.gradient_pernalty(reals, fakes)
         loss += self.lambda_coefficient * grad_penalty
@@ -56,7 +69,6 @@ class GAN(nn.Module):
         Inspired from "https://discuss.pytorch.org/t/gradient-penalty-with-respect-to-the-network-parameters/11944/2"
         """
         z = random_interpolation(reals, fakes)
-        # z.requires_grad = True
 
         output = self.discriminator(z)
         gradients = torch.autograd.grad(
@@ -71,9 +83,29 @@ class GAN(nn.Module):
         norm_2 = gradient.norm(p=2)
         return ((norm_2 - 1)**2).mean()
 
+    @property
+    def training_the_discriminator(self) -> bool:
+        return self._training_the_discriminator
+    
+    @training_the_discriminator.setter
+    def training_the_discriminator(self, value: bool) -> None:
+
+
+    def training_generator(self) -> None:
+       
+
+    def training_discriminator(self) -> None:
+        if not self._training_discriminator:
+            for p in self.generator.parameters():
+                p.requires_grad = False
+            for p in self.discriminator.parameters():
+                p.requires_grad = True
+
+
 def random_interpolation(x, y):
     a = torch.rand_like(x)
     return a * x + (1-a) * y
+
 
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -84,30 +116,47 @@ if __name__ == '__main__':
     from torch.optim import Adam
     
     gan = GAN()
+    gan = gan.to(device)
+    gan.train()
 
-    optimizer = Adam(gan.parameters(), lr=3e-4)
+    g_optimizer = Adam(gan.generator.parameters(), lr=3e-4)
+    d_optimizer = Adam(gan.discriminator.parameters(), lr=3e-4)
+    
+    running_d_loss = 0
+    running_g_loss = 0
 
-    running_loss = 0
     svhn_loader = get_test_loader(64)
-    
-    for epoch in range(20):
+    num_batches = len(svhn_loader)
+
+    for epoch in range(2):
         print(f"------- EPOCH {epoch} --------")
+        
+        i = 0
 
-        for i, (real_images, _) in enumerate(svhn_loader):
-            gan.train()
-            optimizer.zero_grad()
+        image_gen = (images for images, _ in svhn_loader)
+        for i, image_batch in enumerate(image_gen):
+            gan.training_discriminator()
+            for t in range(gan.d_steps_per_g_step):
+                print(t, image_batch.shape)
+                d_optimizer.zero_grad()
+                d_loss = gan.d_loss(image_batch)
+                d_loss.backward()
+                d_optimizer.step()
 
-            real_images = real_images.to(device)
-            loss = gan.loss(real_images)
-            running_loss += loss
+                running_d_loss += d_loss
 
-            loss.backward()
-            optimizer.step()
+                if (i + 1) % 100 == 0:
+                    print(f"Training example {i + 1} / {num_batches}. D-Loss: {running_d_loss:.2f}, G-Loss: {running_g_loss:.2f}")
+                    running_loss = 0
+                i += 1
 
-            if (i + 1) % 100 == 0:
-                print(f"Training example {i + 1} / {len(svhn_loader)}. Loss: {running_loss}", end="\r\n")
-                running_loss = 0
-    
+            gan.training_generator()
+            g_optimizer.zero_grad()
+            g_loss = gan.g_loss()
+            g_loss.backward()
+            g_optimizer.step()
+            running_g_loss += g_loss
+
     torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
     # Generate new images

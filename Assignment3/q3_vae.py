@@ -39,10 +39,10 @@ class Decoder(nn.Module):
             nn.ELU(),
             nn.Conv2d(256, 64, 5, padding=4),
             nn.ELU(),
-            nn.Upsample(scale_factor=2, mode='bilinear'),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(64, 32, 3, padding=2),
             nn.ELU(),
-            nn.Upsample(scale_factor=2, mode='bilinear'),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(32, 16, 3, padding=4),
             nn.ELU(),
             nn.Conv2d(16, 3, 3, padding=2)
