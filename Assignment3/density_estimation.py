@@ -5,11 +5,19 @@ Created on Sat Mar 23 13:20:15 2019
 """
 
 
-from __future__ import print_function
 import numpy as np
 import torch 
 import matplotlib.pyplot as plt
+from q1 import get_optimal_discriminator
 
+import sys
+if sys.version_info[:3] == (3, 6, 7):
+    print("Please use python 3.6.7 when grading this assignment.")
+    print("All The necessary pip packages to install will be listed in 'requirements-pip.txt'")
+    if sys.version_info.major == 2:
+        print("Python 2? Really?! This is 2019. Come on, you have no excuse not to switch to python3.")
+    exit()
+    
 # plot p0 and p1
 plt.figure()
 
@@ -33,22 +41,24 @@ plt.plot(xx, N(xx))
 
 #######--- INSERT YOUR CODE BELOW ---#######
  
-from q1 import get_optimal_discriminator
 
 to_tensor = lambda x: torch.as_tensor(x).float
 
 from samplers import distribution4, distribution3
-f_0 = distribution3(batch_size=512)
-f_1 = distribution4(batch_size=512)
+f_0 = distribution3(batch_size=512) # standard gaussian
+f_1 = distribution4(batch_size=512) # modified 'unknown' distribution
 
 print("Training discriminator...")
 discriminator = get_optimal_discriminator(f_0, f_1)
-def estimate_density(xx: np.ndarray) -> np.ndarray:
+
+def estimate_density(xx):
     d_x = discriminator(xx)
     factor = d_x / (1 - d_x)
-    # f_0_x = next(distribution3(batch_size=xx.shape[0]))
-    f_0_x = xx
-    return (f_0_x * factor)
+    f_0_x = N(xx)
+    f_0_x = np.reshape(f_0_x, [-1, 1])
+    estimate = f_0_x * factor
+    estimate = np.reshape(estimate, xx.shape)
+    return estimate
 
 ############### plotting things
 ############### (1) plot the output of your trained discriminator 

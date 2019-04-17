@@ -2,7 +2,6 @@
 
 import torch
 from torch import nn
-from torch.optim import SGD
 import numpy as np
 from typing import Iterable
 
@@ -62,7 +61,9 @@ def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
 
     network = nn.Sequential(
         nn.Linear(p_0.shape[-1], 512),
+        nn.Tanh(),
         nn.Linear(512, 256),
+        nn.Tanh(),
         nn.Linear(256, 1),
     )
 
@@ -73,7 +74,7 @@ def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
     network.train()
     network.float()
     params = network.parameters()
-    optimizer = SGD(params, lr=1e-3)
+    optimizer = torch.optim.Adam(params, lr=1e-3)
 
     value: float = 0.0
     hook = StopIfConverged(threshold=threshold)
@@ -218,7 +219,7 @@ def get_optimal_discriminator(f_0, f_1):
         maxsteps=10000,
         threshold=0.001,
     )
-    def disc(x: torch.Tensor) -> torch.Tensor:
+    def disc(x: np.ndarray) -> np.ndarray:
         with torch.no_grad():
             x = torch.as_tensor(x).view([-1, 1]).float()
             d_x = torch.sigmoid(discriminator(x))
