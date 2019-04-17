@@ -33,7 +33,7 @@ xx = np.linspace(-5,5,1000)
 N = lambda x: np.exp(-x**2/2.)/((2*np.pi)**0.5)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.plot(xx, N(xx))
-
+plt.savefig("./q1_4_1.png")
 ############### import the sampler ``samplers.distribution4'' 
 
 ############### train a discriminator on distribution4 and standard gaussian
@@ -79,7 +79,7 @@ plt.plot(xx,estimate)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.legend(['Estimated','True'])
 plt.title('Estimated vs True')
-
+plt.savefig("./q1_4_2.png")
 
 
 

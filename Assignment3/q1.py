@@ -1,11 +1,14 @@
 #!~/Source/IFT6135/env/bin/python3
-
-import torch
-from torch import nn
-import numpy as np
-import progressbar
-from typing import Iterable
-
+try:
+        
+    import torch
+    from torch import nn
+    import numpy as np
+    import progressbar
+    from typing import Iterable
+except ModuleNotFoundError as e:
+    print(e)
+    print("Please install the modules listed in requirements-pip.txt with: 'pip install -r requirements-pip.txt'")
 
 def jensen_shannon_divergence(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.FloatTensor:
     D_theta_x = torch.sigmoid(network(x))
@@ -168,13 +171,12 @@ def to_tensors(generator: Iterable[np.ndarray]) -> Iterable[torch.Tensor]:
         yield torch.as_tensor(item).float()
 
 
-def q1(p, q, *args):
-    return maximize_objective(jensen_shannon_divergence, p, q, *args)
+def q1(p, q, **kwargs):
+    return maximize_objective(jensen_shannon_divergence, p, q, **kwargs)
 
 
-def q2(p, q):
-    return maximize_objective(wasserstein_distance, p, q, *args)
-
+def q2(p, q, **kwargs):
+    return maximize_objective(wasserstein_distance, p, q, **kwargs)
 
 def q3():
     print("Starting Q3.")
@@ -205,8 +207,8 @@ def q3():
     ax.legend()
     ax.set_xlabel("phi")
     ax.set_ylabel("Distance metric value")
-    plt.show()
     plt.savefig("./q1_3.png")
+    plt.show()
 
 
 def get_optimal_discriminator(f_0, f_1):
@@ -234,7 +236,6 @@ def q4():
     import matplotlib.pyplot as plt
     import density_estimation
     plt.show()
-    plt.savefig("./q1_4.png")
 
 if __name__ == "__main__":
     q3()
