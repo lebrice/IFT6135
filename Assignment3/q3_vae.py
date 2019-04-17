@@ -83,9 +83,9 @@ if __name__ == '__main__':
 
     running_loss = 0
 
+    svhn_loader = get_test_loader(64)
     for epoch in range(20):
 
-        svhn_loader = get_test_loader(64)
         print(f"------- EPOCH {epoch} --------")
 
         for i, (x, _) in enumerate(svhn_loader):
