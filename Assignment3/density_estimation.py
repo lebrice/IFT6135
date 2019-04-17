@@ -11,13 +11,13 @@ import matplotlib.pyplot as plt
 from q1 import get_optimal_discriminator
 
 import sys
-if sys.version_info[:3] == (3, 6, 7):
+if sys.version_info[:3] < (3, 6, 7):
     print("Please use python 3.6.7 when grading this assignment.")
     print("All The necessary pip packages to install will be listed in 'requirements-pip.txt'")
     if sys.version_info.major == 2:
         print("Python 2? Really?! This is 2019. Come on, you have no excuse not to switch to python3.")
     exit()
-    
+
 # plot p0 and p1
 plt.figure()
 

@@ -3,6 +3,7 @@
 import torch
 from torch import nn
 import numpy as np
+import progressbar
 from typing import Iterable
 
 
@@ -51,7 +52,7 @@ def gradient_pernalty(model, x, y):
     return ((norm_2 - 1)**2).mean()
 
 
-def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
+def maximize_objective(objective, p, q, maxsteps=1000, threshold=0.001):
     p = to_tensors(p)
     q = to_tensors(q)
 
@@ -78,21 +79,22 @@ def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
 
     value: float = 0.0
     hook = StopIfConverged(threshold=threshold)
-    for i, x, y in zip(range(maxsteps), p, q):
-        # print(x)
-        loss = - objective(network, x, y)
-        loss.backward()
+    with progressbar.ProgressBar(max_value=maxsteps, prefix=f"{objective.__name__}: ") as bar:
+        for i, x, y in zip(range(maxsteps), p, q):
+            bar.update(i)
+            loss = - objective(network, x, y)
+            loss.backward()
 
-        optimizer.step()
-        optimizer.zero_grad()
-        value = - loss.item()
-        if hook(value):
-            print(f"converged at step {i}")
-            break
-    else:
-        print(f"Did not converge after {i} steps!")
-
-    print(f"Steps: {i}, value: {value}")
+            optimizer.step()
+            optimizer.zero_grad()
+            value = - loss.item()
+            if hook(value):
+                # print(f"converged at step {i}")
+                break
+        else:
+            # print(f"Did not converge after {i} steps!")
+            pass
+    # print(f"Steps: {i}, value: {value}")
     return value, network
 
 
@@ -166,15 +168,16 @@ def to_tensors(generator: Iterable[np.ndarray]) -> Iterable[torch.Tensor]:
         yield torch.as_tensor(item).float()
 
 
-def q1(p, q):
-    return maximize_objective(jensen_shannon_divergence, p, q)
+def q1(p, q, *args):
+    return maximize_objective(jensen_shannon_divergence, p, q, *args)
 
 
 def q2(p, q):
-    return maximize_objective(wasserstein_distance, p, q)
+    return maximize_objective(wasserstein_distance, p, q, *args)
 
 
 def q3():
+    print("Starting Q3.")
     from samplers import distribution1
     import matplotlib.pyplot as plt
     
@@ -188,8 +191,8 @@ def q3():
     phis = np.arange(-1, 1.1, 0.1)
     jsds = []; wds = []
     for i, phi in enumerate(phis):
-        print(f"phi: {phi:.2f}")
         jsd, wd = get_samples(phi)
+        print(f"phi: {phi:.2f}, jsd: {jsd:.2f}, wd: {wd:.2f}")
         jsds.append(jsd)
         wds.append(wd)
 
@@ -234,5 +237,6 @@ def q4():
     plt.savefig("./q1_4.png")
 
 if __name__ == "__main__":
+    q3()
     q4()
     
