@@ -44,7 +44,7 @@ class GAN(nn.Module):
         fakes = self.generator(latents)
         fakes_score = self.discriminator(fakes)
         reals_score = self.discriminator(reals)
-        loss = (fakes_score + reals_score).mean()
+        loss = (reals_score - fakes_score).mean()
         
         grad_penalty = self.gradient_pernalty(reals, fakes)
         loss += self.lambda_coefficient * grad_penalty
