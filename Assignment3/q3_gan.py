@@ -1,7 +1,8 @@
 
 import torch
 from torch import nn
-from typing import Tuple
+from torch.optim import Adam
+from typing import Tuple, Iterable, Dict, Callable, Any
 
 # TODO: change to q3_vae, rather than q2.
 from q3_vae import Encoder, Decoder
@@ -35,15 +36,36 @@ class GAN(nn.Module):
 
         self.lambda_coefficient = 10.0
         self.batch_size = None
+        
+        self.g_optimizer = Adam(self.generator.parameters(), lr=3e-4)
+        self.d_optimizer = Adam(self.discriminator.parameters(), lr=3e-4)
 
         # TODO: Tune this hyperparameter
-        self.d_steps_per_g_step = 3
+        self.d_steps_per_g_step: int = 3
 
-        self.training_the_discriminator = True
+        self._training_the_discriminator: bool = None
+
+    def train_g(self) -> torch.FloatTensor:
+        self.training_the_generator = True
+        self.g_optimizer.zero_grad()
+        loss = self.g_loss()
+        loss.backward()
+        self.g_optimizer.step()
+        return loss
+
+    def train_d(self, real_images_batch: torch.Tensor) -> torch.FloatTensor:
+        self.training_the_discriminator = False
+        self.d_optimizer.zero_grad()
+        real_images_batch.requires_grad = True
+        loss = self.d_loss(real_images_batch)
+        loss.backward()
+        self.d_optimizer.step()
+        return loss
+
 
     def g_loss(self) -> torch.FloatTensor:
         assert self.batch_size is not None, "d_loss should have been called before g_loss"
-        latents = torch.randn([self.batch_size, self.latent_size])
+        latents = torch.randn([self.batch_size, self.latent_size], requires_grad=True)
         fakes = self.generator(latents)
         fakes_scores = self.discriminator(fakes)
         return - fakes_scores.mean()
@@ -75,7 +97,7 @@ class GAN(nn.Module):
             outputs=output,
             inputs=z,
             grad_outputs=torch.ones_like(output),
-            create_graph=True,
+            create_graph=False,
             retain_graph=True,
             only_inputs=True,
         )
@@ -89,17 +111,20 @@ class GAN(nn.Module):
     
     @training_the_discriminator.setter
     def training_the_discriminator(self, value: bool) -> None:
-
-
-    def training_generator(self) -> None:
-       
-
-    def training_discriminator(self) -> None:
-        if not self._training_discriminator:
-            for p in self.generator.parameters():
-                p.requires_grad = False
+        if self._training_the_discriminator != value:
+            self._training_the_discriminator = value
             for p in self.discriminator.parameters():
-                p.requires_grad = True
+                p.requires_grad = value
+            for p in self.generator.parameters():
+                p.requires_grad = value
+    
+    @property
+    def training_the_generator(self) -> bool:
+        return not self.training_the_discriminator
+    
+    @training_the_generator.setter
+    def training_the_generator(self, value: bool) -> None:
+        self.training_the_discriminator = not value
 
 
 def random_interpolation(x, y):
@@ -107,7 +132,19 @@ def random_interpolation(x, y):
     return a * x + (1-a) * y
 
 
-if __name__ == '__main__':
+def call_fns_every_n_steps_iter(source_iter: Iterable[Any], n_to_function_dict: Dict[int, Callable]) -> Iterable[Any]:
+    """
+    Convenience function for training loops, logging, etc.
+    """
+    for i, element in enumerate(source_iter):
+        yield element
+        for n, function in n_to_function_dict.items():
+            if i % n == 0 and i != 0:
+                # print("step", i, "calling", function.__name__)
+                function()
+
+
+def main(epochs=20):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
     
@@ -119,43 +156,37 @@ if __name__ == '__main__':
     gan = gan.to(device)
     gan.train()
 
-    g_optimizer = Adam(gan.generator.parameters(), lr=3e-4)
-    d_optimizer = Adam(gan.discriminator.parameters(), lr=3e-4)
-    
     running_d_loss = 0
     running_g_loss = 0
 
     svhn_loader = get_test_loader(64)
     num_batches = len(svhn_loader)
 
-    for epoch in range(2):
+    for epoch in range(epochs):
         print(f"------- EPOCH {epoch} --------")
         
-        i = 0
-
         image_gen = (images for images, _ in svhn_loader)
-        for i, image_batch in enumerate(image_gen):
-            gan.training_discriminator()
-            for t in range(gan.d_steps_per_g_step):
-                print(t, image_batch.shape)
-                d_optimizer.zero_grad()
-                d_loss = gan.d_loss(image_batch)
-                d_loss.backward()
-                d_optimizer.step()
 
-                running_d_loss += d_loss
+        def g_step():
+            nonlocal running_g_loss
+            loss = gan.train_g()            
+            running_g_loss += loss
 
-                if (i + 1) % 100 == 0:
-                    print(f"Training example {i + 1} / {num_batches}. D-Loss: {running_d_loss:.2f}, G-Loss: {running_g_loss:.2f}")
-                    running_loss = 0
-                i += 1
+        def log_losses_and_reset():
+            nonlocal running_d_loss, running_g_loss
+            print(f"Training batch {i + 1} / {num_batches}. D-Loss: {running_d_loss:.2f}, G-Loss: {running_g_loss:.2f}")
+            running_d_loss, running_g_loss = 0, 0
 
-            gan.training_generator()
-            g_optimizer.zero_grad()
-            g_loss = gan.g_loss()
-            g_loss.backward()
-            g_optimizer.step()
-            running_g_loss += g_loss
+        n_to_callback_dict = {
+            gan.d_steps_per_g_step: g_step,
+            100: log_losses_and_reset,
+        }
+
+        i = 0
+        for image_batch in call_fns_every_n_steps_iter(image_gen, n_to_callback_dict):
+            d_loss = gan.train_d(image_batch)
+            running_d_loss += d_loss
+            i += 1
 
     torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
@@ -164,3 +195,5 @@ if __name__ == '__main__':
     generated = gan.generator(z)
     torchvision.utils.save_image(generated, 'gan-generated.png', normalize=True)
         
+if __name__ == "__main__":
+    main()
