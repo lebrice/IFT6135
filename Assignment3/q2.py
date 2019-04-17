@@ -139,18 +139,22 @@ def importance_sample_vae(vae, x, z, device):
     L = z.size(2)
     
     z_flattened = z.view(-1, L)
-    p_x_given_z = torch.mean(vae.decoder(z_flattened).view(M, K, -1), dim=-1).unsqueeze(-1) # (64, 200, 784) -> (64, 200, 1) (M, K, 1)
+    p_x_given_z = torch.sum(torch.log(vae.decoder(z_flattened).view(M, K, -1)), dim=-1) # (64, 200, 784) -> (64, 200) (M, K)
 
-    q_z_given_x, _ = vae.encoder(x.view(M, 1, int(np.sqrt(D)), -1)) # Just take the mean?
-    q_z_given_x = q_z_given_x[:, None, :] # (64, 1, 100) (M, 1, L)
+    q_z_given_x_mu, q_z_given_x_logvar = vae.encoder(x.view(M, 1, int(np.sqrt(D)), -1)) # (64, 100) (M, L)
+    # TODO: Doesn't make sense to take mu here I think since it can be negative. But this can't also be the same as p_z...
+    q_z_given_x = torch.sum(torch.log(q_z_given_x_mu), dim=-1).unsqueeze(-1) # (64, 1) (M, 1)
 
-    normal = torch.distributions.normal.Normal(torch.tensor([0.0], device=device), torch.tensor([1.0], device=device))
-    p_z = normal.log_prob(z) # Compare to a unit gaussian or to something in the NN? (64, 200, 100) (M, K, L)
+    normal = torch.distributions.normal.Normal(q_z_given_x_mu[:, None, :], torch.exp(q_z_given_x_logvar)[:, None, :])
+    p_z = torch.sum(normal.log_prob(z), dim=-1) # (64, 200, 100) (M, K, L) --> (64, 200) (M, k)
 
+    # TODO remove these logs once debugged
     print(f"p_x_given_z --> max: {p_x_given_z.max()}, min: {p_x_given_z.min()}, mean: {p_x_given_z.mean()}")
     print(f"p_z --> max: {p_z.max()}, min: {p_z.min()}, mean: {p_z.mean()}")
     print(f"q_z_given_x --> max: {q_z_given_x.max()}, min: {q_z_given_x.min()}, mean: {q_z_given_x.mean()}")
-    return torch.log(1 / K * torch.sum(torch.mean(p_x_given_z * p_z / q_z_given_x, dim=2), dim=1))
+    # return torch.log(1 / K * torch.sum(torch.mean(p_x_given_z * p_z / q_z_given_x, dim=2), dim=1))
+    # Instead of the above, use the log-sum-exp trick with log probabilities:
+    return torch.log(1 / K * torch.sum(torch.exp(p_x_given_z + p_z - q_z_given_x), dim=1))
 
 
 def part2(device):
@@ -161,12 +165,16 @@ def part2(device):
     vae.eval()
     vae = vae.to(device)
 
-    with torch.no_grad():
-        metric = validate(vae, valid, device, method='importance')
-        print(metric)
+    for method in ['elbo', 'importance']:
+        for dataset in [valid, test]:
+            with torch.no_grad():
+                metric = validate(vae, dataset, device, method=method)
+                dataset_name = "validation" if dataset == valid else "test"
+                print(f"Evaluation of the trained model on the {dataset_name} set using the {method} method resulted in an evaluation of {metric}.")
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
 
+    #part1(device)
     part2(device)
