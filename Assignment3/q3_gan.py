@@ -56,7 +56,7 @@ class GAN(nn.Module):
         Inspired from "https://discuss.pytorch.org/t/gradient-penalty-with-respect-to-the-network-parameters/11944/2"
         """
         z = random_interpolation(reals, fakes)
-        z.requires_grad = True
+        # z.requires_grad = True
 
         output = self.discriminator(z)
         gradients = torch.autograd.grad(
@@ -79,6 +79,7 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
     
+    import torchvision
     from score_fid import get_test_loader
     from torch.optim import Adam
     
@@ -87,8 +88,9 @@ if __name__ == '__main__':
     optimizer = Adam(gan.parameters(), lr=3e-4)
 
     running_loss = 0
+    svhn_loader = get_test_loader(64)
+    
     for epoch in range(20):
-        svhn_loader = get_test_loader(64)
         print(f"------- EPOCH {epoch} --------")
 
         for i, (real_images, _) in enumerate(svhn_loader):
@@ -105,3 +107,11 @@ if __name__ == '__main__':
             if (i + 1) % 100 == 0:
                 print(f"Training example {i + 1} / {len(svhn_loader)}. Loss: {running_loss}", end="\r\n")
                 running_loss = 0
+    
+    torch.save(gan.state_dict(), 'q3_gan_save.pth')
+
+    # Generate new images
+    z = torch.randn(64, 100, device=device)
+    generated = gan.generator(z)
+    torchvision.utils.save_image(generated, 'gan-generated.png', normalize=True)
+        
