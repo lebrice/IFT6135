@@ -5,10 +5,18 @@ Created on Sat Mar 23 13:20:15 2019
 """
 
 
-from __future__ import print_function
 import numpy as np
 import torch 
 import matplotlib.pyplot as plt
+from q1 import get_optimal_discriminator
+
+import sys
+if sys.version_info[:3] < (3, 6, 7):
+    print("Please use python 3.6.7 when grading this assignment.")
+    print("All The necessary pip packages to install will be listed in 'requirements-pip.txt'")
+    if sys.version_info.major == 2:
+        print("Python 2? Really?! This is 2019. Come on, you have no excuse not to switch to python3.")
+    exit()
 
 # plot p0 and p1
 plt.figure()
@@ -25,7 +33,7 @@ xx = np.linspace(-5,5,1000)
 N = lambda x: np.exp(-x**2/2.)/((2*np.pi)**0.5)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.plot(xx, N(xx))
-
+plt.savefig("./q1_4_1.png")
 ############### import the sampler ``samplers.distribution4'' 
 
 ############### train a discriminator on distribution4 and standard gaussian
@@ -33,22 +41,30 @@ plt.plot(xx, N(xx))
 
 #######--- INSERT YOUR CODE BELOW ---#######
  
-from q1 import get_optimal_discriminator
 
 to_tensor = lambda x: torch.as_tensor(x).float
 
 from samplers import distribution4, distribution3
-f_0 = distribution3(batch_size=512)
-f_1 = distribution4(batch_size=512)
+f_0 = distribution3(batch_size=512) # standard gaussian
+f_1 = distribution4(batch_size=512) # modified 'unknown' distribution
 
 print("Training discriminator...")
-discriminator = get_optimal_discriminator(f_0, f_1)
-def estimate_density(xx: np.ndarray) -> np.ndarray:
+discriminator = get_optimal_discriminator(f_1, f_0, maxsteps=1_000, threshold=1e-3)
+
+
+def estimate_density(xx):
     d_x = discriminator(xx)
-    factor = d_x / (1 - d_x)
-    # f_0_x = next(distribution3(batch_size=xx.shape[0]))
-    f_0_x = xx
-    return (f_0_x * factor)
+    # prevent division by zero:
+    d_x = np.maximum(d_x, 1e-8)
+    d_x = np.minimum(d_x, 1 - 1e-8)
+
+    base_density = N(xx)
+    scaling_factor = (1 - d_x) / d_x
+    
+    # plt.plot(xx, scaling_factor, color="red")
+
+    estimate = base_density * scaling_factor
+    return estimate
 
 ############### plotting things
 ############### (1) plot the output of your trained discriminator 
@@ -69,12 +85,13 @@ plt.plot(xx,estimate)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.legend(['Estimated','True'])
 plt.title('Estimated vs True')
+plt.savefig("./q1_4_2.png")
 
 
 
 
-
-
+if __name__ == "__main__":
+    plt.show()
 
 
 

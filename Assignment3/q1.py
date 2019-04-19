@@ -1,11 +1,15 @@
 #!~/Source/IFT6135/env/bin/python3
-
-import torch
-from torch import nn
-from torch.optim import SGD
-import numpy as np
-from typing import Iterable
-
+try:
+        
+    import torch
+    from torch import nn
+    import numpy as np
+    import progressbar
+    from typing import Iterable
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError as e:
+    print(e)
+    print("Please install the modules listed in requirements-pip.txt with: 'pip install -r requirements-pip.txt'")
 
 def jensen_shannon_divergence(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.FloatTensor:
     D_theta_x = torch.sigmoid(network(x))
@@ -52,7 +56,7 @@ def gradient_pernalty(model, x, y):
     return ((norm_2 - 1)**2).mean()
 
 
-def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
+def maximize_objective(objective, p, q, network=None, maxsteps=1000, threshold=0.001):
     p = to_tensors(p)
     q = to_tensors(q)
 
@@ -60,9 +64,11 @@ def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
     q_0 = next(q)
     assert p_0.shape == q_0.shape, "P and Q have to have the same shape of elements!"
 
-    network = nn.Sequential(
+    network = network if network is not None else nn.Sequential(
         nn.Linear(p_0.shape[-1], 512),
+        nn.Tanh(),
         nn.Linear(512, 256),
+        nn.Tanh(),
         nn.Linear(256, 1),
     )
 
@@ -73,25 +79,26 @@ def maximize_objective(objective, p, q, maxsteps=5000, threshold=0.001):
     network.train()
     network.float()
     params = network.parameters()
-    optimizer = SGD(params, lr=1e-3)
+    optimizer = torch.optim.Adam(params, lr=1e-3)
 
     value: float = 0.0
     hook = StopIfConverged(threshold=threshold)
-    for i, x, y in zip(range(maxsteps), p, q):
-        # print(x)
-        loss = - objective(network, x, y)
-        loss.backward()
+    with progressbar.ProgressBar(max_value=maxsteps, prefix=f"{objective.__name__}", redirect_stdout=True) as bar:
+        for i, x, y in zip(range(maxsteps), p, q):
+            bar.update(i)
+            loss = - objective(network, x, y)
+            loss.backward()
 
-        optimizer.step()
-        optimizer.zero_grad()
-        value = - loss.item()
-        if hook(value):
-            print(f"converged at step {i}")
-            break
-    else:
-        print(f"Did not converge after {i} steps!")
-
-    print(f"Steps: {i}, value: {value}")
+            optimizer.step()
+            optimizer.zero_grad()
+            value = - loss.item()
+            if hook(value):
+                # print(f"converged at step {i}")
+                break
+        else:
+            print(f"Did not converge after {i} steps!")
+            pass
+    # print(f"Steps: {i}, value: {value}")
     return value, network
 
 
@@ -165,30 +172,29 @@ def to_tensors(generator: Iterable[np.ndarray]) -> Iterable[torch.Tensor]:
         yield torch.as_tensor(item).float()
 
 
-def q1(p, q):
-    return maximize_objective(jensen_shannon_divergence, p, q)
+def q1(p, q, **kwargs):
+    return maximize_objective(jensen_shannon_divergence, p, q, **kwargs)
 
 
-def q2(p, q):
-    return maximize_objective(wasserstein_distance, p, q)
-
+def q2(p, q, **kwargs):
+    return maximize_objective(wasserstein_distance, p, q, **kwargs)
 
 def q3():
+    print("Starting Q3.")
     from samplers import distribution1
-    import matplotlib.pyplot as plt
     
     def get_samples(phi: float):
         p = distribution1(0)
         q = distribution1(phi)
-        jsd, _ = q1(p, q)
-        wd, _ = q2(p, q)
+        jsd, _ = q1(p, q, maxsteps=1000, threshold=0.01)
+        wd, _  = q2(p, q, maxsteps=1000, threshold=0.01)
         return jsd, wd
 
     phis = np.arange(-1, 1.1, 0.1)
     jsds = []; wds = []
     for i, phi in enumerate(phis):
-        print(f"phi: {phi:.2f}")
         jsd, wd = get_samples(phi)
+        print(f"phi: {phi:.2f}, jsd: {jsd:.2f}, wd: {wd:.2f}")
         jsds.append(jsd)
         wds.append(wd)
 
@@ -201,37 +207,50 @@ def q3():
     ax.legend()
     ax.set_xlabel("phi")
     ax.set_ylabel("Distance metric value")
-    plt.show()
     plt.savefig("./q1_3.png")
+    plt.show()
 
 
-def get_optimal_discriminator(f_0, f_1):
+def get_optimal_discriminator(f_0, f_1, **kwargs):
     def discriminator_value_fn(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        D_theta_x = nn.functional.logsigmoid(network(x))
-        D_theta_y = torch.log(1 - torch.sigmoid(network(y)))
-        return (D_theta_x + D_theta_y).mean()
+        D_theta_x = torch.log(network(x))
+        D_theta_y = torch.log(1 - network(y))
+        return (D_theta_x + D_theta_y).sum()
 
-    value, discriminator = maximize_objective(
+    discriminator_network = nn.Sequential(
+        nn.Linear(1, 512),
+        nn.Tanh(),
+        nn.Linear(512, 256),
+        nn.Tanh(),
+        nn.Linear(256, 1),
+        nn.Sigmoid(),
+    )
+
+    value, disc = maximize_objective(
         discriminator_value_fn,
+        network=discriminator_network,
         p=f_0,
         q=f_1,
-        maxsteps=10000,
-        threshold=0.001,
+        **kwargs,
     )
-    def disc(x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            x = torch.as_tensor(x).view([-1, 1]).float()
-            d_x = torch.sigmoid(discriminator(x))
-            return d_x.numpy()
 
-    return disc
+    def disc_numpy(x: np.ndarray) -> np.ndarray:
+        """
+        Adds preprocessing and postprocessing to/from numpy to D_star. 
+        """
+        with torch.no_grad():
+            _x = torch.as_tensor(x).view([-1, 1]).float()
+            d_x = disc(_x)
+            d_x = np.reshape(d_x.numpy(), x.shape)
+            return d_x
+
+    return disc_numpy
 
 def q4():
-    import matplotlib.pyplot as plt
     import density_estimation
     plt.show()
-    plt.savefig("./q1_4.png")
 
 if __name__ == "__main__":
+    # q3()
     q4()
     
