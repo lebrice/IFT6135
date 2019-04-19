@@ -1,6 +1,7 @@
 import torch
 from torch import nn, optim
 import numpy as np
+import math
 
 from mnist_loader import get_data_loader
 
@@ -64,7 +65,7 @@ class VAE(nn.Module):
     def forward(self, x):
         mu, logvar = self.encoder(x)
         std = torch.exp(logvar / 2)
-        z = mu + std * torch.randn_like(std)
+        z = mu + std * torch.randn_like(std) #reparametrization trick
         return self.decoder(z), mu, logvar
 
 def ELBO(output, target, mu, logvar):
@@ -138,23 +139,37 @@ def importance_sample_vae(vae, x, z, device):
     D = x.size(1)
     L = z.size(2)
     
-    z_flattened = z.view(-1, L)
-    p_x_given_z = torch.sum(torch.log(vae.decoder(z_flattened).view(M, K, -1)), dim=-1) # (64, 200, 784) -> (64, 200) (M, K)
+    #Estimating the Log Marginal Likelihood with Importance sampling
+    log_probs = torch.zeros([M, K], device=device) 
 
-    q_z_given_x_mu, q_z_given_x_logvar = vae.encoder(x.view(M, 1, int(np.sqrt(D)), -1)) # (64, 100) (M, L)
-    # TODO: Doesn't make sense to take mu here I think since it can be negative. But this can't also be the same as p_z...
-    q_z_given_x = torch.sum(torch.log(q_z_given_x_mu), dim=-1).unsqueeze(-1) # (64, 1) (M, 1)
+    #Compute the 3 log probabilites p(x|z), p(z), q(z|x) given K samples
+    for i in range(K):
+        
+        z_i = z[:,i,:]
 
-    normal = torch.distributions.normal.Normal(q_z_given_x_mu[:, None, :], torch.exp(q_z_given_x_logvar)[:, None, :])
-    p_z = torch.sum(normal.log_prob(z), dim=-1) # (64, 200, 100) (M, K, L) --> (64, 200) (M, k)
+        #p(x|z) - Use binary cross entropy (Bernoulli distributions)
+        y = vae.decoder(z_i).view(M,-1)
+        p_x_given_z = -torch.sum(torch.nn.functional.binary_cross_entropy(y, x, reduction='none'), dim=-1) # (64, 784) -> (64) (M)
 
-    # TODO remove these logs once debugged
-    print(f"p_x_given_z --> max: {p_x_given_z.max()}, min: {p_x_given_z.min()}, mean: {p_x_given_z.mean()}")
-    print(f"p_z --> max: {p_z.max()}, min: {p_z.min()}, mean: {p_z.mean()}")
-    print(f"q_z_given_x --> max: {q_z_given_x.max()}, min: {q_z_given_x.min()}, mean: {q_z_given_x.mean()}")
-    # return torch.log(1 / K * torch.sum(torch.mean(p_x_given_z * p_z / q_z_given_x, dim=2), dim=1))
-    # Instead of the above, use the log-sum-exp trick with log probabilities:
-    return torch.log(1 / K * torch.sum(torch.exp(p_x_given_z + p_z - q_z_given_x), dim=1))
+        #q(z|x) - Normal distribution
+        q_z_given_x_mu, q_z_given_x_logvar = vae.encoder(x.view(M, 1, int(np.sqrt(D)), -1)) # (64, 100) (M, L)
+        normal = torch.distributions.normal.Normal(q_z_given_x_mu, torch.exp(q_z_given_x_logvar/2))
+        q_z_given_x = torch.sum(normal.log_prob(z_i), dim=-1) # (64, 100) (M, L) --> (64) (M)
+        
+        #p(z) - Standard Normal 
+        std_normal = torch.distributions.normal.Normal(torch.zeros(L, device=device), torch.ones(L, device=device))
+        p_z = torch.sum(std_normal.log_prob(z_i), dim=-1) # (64, 100) (M, L) --> (64) (M)
+        
+        #Store the log probabilities of the samples to later use the log-sum-exp trick 
+        log_probs[:,i] = p_x_given_z + p_z - q_z_given_x #(64, 200) (M, K)
+
+    #Get log p(x) by using Log-sum-exp
+    #To avoid inf values because of numerical instability, use Torch.logsumexp which is numerically stabilized
+    #https://pytorch.org/docs/stable/torch.html#torch.logsumexp
+    p_x = torch.logsumexp(log_probs,-1) - math.log(K) #(64) (M)
+
+    #Return M estimates of log p(x)
+    return p_x
 
 
 def part2(device):
