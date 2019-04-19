@@ -163,7 +163,7 @@ def importance_sample_vae(vae, x, z, device):
         #Store the log probabilities of the samples to later use the log-sum-exp trick 
         log_probs[:,i] = p_x_given_z + p_z - q_z_given_x #(64, 200) (M, K)
 
-    #Get log p(x) by using Log-sum-exp
+    #Get log p(x) by using Log-sum-exp - log (K) : VAE-lecture slide 20
     #To avoid inf values because of numerical instability, use Torch.logsumexp which is numerically stabilized
     #https://pytorch.org/docs/stable/torch.html#torch.logsumexp
     p_x = torch.logsumexp(log_probs,-1) - math.log(K) #(64) (M)

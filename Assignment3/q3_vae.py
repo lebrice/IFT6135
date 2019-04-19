@@ -71,6 +71,65 @@ def ELBO(output, target, mu, logvar):
     elbo += 0.5 * torch.sum(1 + logvar - mu.pow(2) - torch.exp(logvar))
     return elbo / output.size(0)
 
+def visual_samples(vae, dimensions, device, svhn_loader):
+    # Generate new images
+    z = torch.randn(64, dimensions, device=device)
+    generated = vae.decoder(z)
+    torchvision.utils.save_image(generated, 'images/3.1vae-generated.png', normalize=True)
+    
+    #Original image vs Reconstruction 
+    x = next(iter(svhn_loader))[0]
+    torchvision.utils.save_image(x, 'images/3.1vae-initial.png', normalize=True)
+    x = x.to(device)
+    y, mu, logvar = vae(x)
+    torchvision.utils.save_image(y, 'images/3.1vae-restored.png', normalize=True)
+
+def disentangled_representation(vae, dimensions, device, epsilon = 3):
+    #Sample from prior p(z) which is a Std Normal
+    z = torch.randn(dimensions, device=device)
+    
+    #Copy this tensor times its number of dimensions and make perturbations on each dimension
+    #The first element is the original sample
+    z = z.repeat(dimensions+1, 1)
+    for i, sample in enumerate(z[1:]):
+        sample[i] += epsilon
+
+    generated = vae.decoder(z)
+    torchvision.utils.save_image(generated, 'images/3_2positive_eps.png', normalize=True)
+
+    #Do the same with the negative epsilon
+    epsilon = -2*epsilon
+    for i, sample in enumerate(z[1:]):
+        sample[i] += epsilon
+
+    #Make a batch of the pertubations and pass it through the decoder
+    generated = vae.decoder(z)
+    torchvision.utils.save_image(generated, 'images/3_2negative_eps.png', normalize=True)
+
+def interpolation(vae, dimensions, device):
+    # Interpolate in the latent space between z_0 and z_1
+    z_0 = torch.randn(1,dimensions, device=device)
+    z_1 = torch.randn(1,dimensions, device=device)
+    z_a = torch.zeros([11,dimensions], device=device)
+
+    for i in range(11):
+        a = i/10
+        z_a[i] = a*z_0 + (1-a)*z_1
+
+    generated = vae.decoder(z_a)
+    torchvision.utils.save_image(generated, 'images/3_3latent.png', normalize=True)
+    
+    # Interpolate in the data space between x_0 and x_1
+    x_0 = vae.decoder(z_0)
+    x_1 = vae.decoder(z_1)
+    x_a = torch.zeros(11,x_0.size()[1],x_0.size()[2],x_0.size()[3], device=device)
+
+    for i in range(11):
+        a = i/10
+        x_a[i] = a*x_0 + (1-a)*x_1
+
+    torchvision.utils.save_image(x_a, 'images/3_3data.png', normalize=True)
+    
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
@@ -84,31 +143,42 @@ if __name__ == '__main__':
     running_loss = 0
 
     svhn_loader = get_test_loader(64)
-    for epoch in range(20):
+    
+    try: 
+        vae.load_state_dict(torch.load('q3_vae_save.pth', map_location=device))
+        print('----Using saved model----')
 
-        print(f"------- EPOCH {epoch} --------")
+    except FileNotFoundError:
+        for epoch in range(20):
 
-        for i, (x, _) in enumerate(svhn_loader):
-            vae.train()
-            optimizer.zero_grad()
+            print(f"------- EPOCH {epoch} --------")
 
-            x = x.to(device)
-            y, mu, logvar = vae(x)
+            for i, (x, _) in enumerate(svhn_loader):
+                vae.train()
+                optimizer.zero_grad()
 
-            loss = -ELBO(y, x, mu, logvar)
-            running_loss += loss
+                x = x.to(device)
+                y, mu, logvar = vae(x)
 
-            loss.backward()
-            optimizer.step()
+                loss = -ELBO(y, x, mu, logvar)
+                running_loss += loss
 
-            if (i + 1) % 100 == 0:
-                print(f"Training example {i + 1} / {len(svhn_loader)}. Loss: {running_loss}")
-                running_loss = 0
+                loss.backward()
+                optimizer.step()
 
-    torch.save(vae.state_dict(), 'q3_vae_save.pth')
+                if (i + 1) % 100 == 0:
+                    print(f"Training example {i + 1} / {len(svhn_loader)}. Loss: {running_loss}")
+                    running_loss = 0
 
-    # Generate new images
-    z = torch.randn(64, 100, device=device)
-    generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'vae-generated.png', normalize=True)
-        
+        torch.save(vae.state_dict(), 'q3_vae_save.pth')
+
+    dimensions = 100
+    
+    #3.1 Visual samples
+    visual_samples(vae, dimensions, device, svhn_loader)
+
+    #3.2 Disentangled representation
+    disentangled_representation(vae, dimensions, device, epsilon=10)
+
+    #3.3 Interpolation
+    interpolation(vae, dimensions, device)
