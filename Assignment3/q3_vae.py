@@ -142,13 +142,13 @@ def save_1000_images(img_dir: str):
     
     for p in vae.parameters():
         p.requires_grad = False
-
+        os.makedirs(f"{img_dir}/img/", exist_ok=True)
     for i in range(10):
         print(i)
         latents = torch.randn(100, 100, device=device)
         images = vae.decoder(latents)
         for j, image in enumerate(images):
-            filename = f"images/vae/fid/img{i * 100 + j:03d}.png"
+            filename = f"images/vae/fid/img/{i * 100 + j:03d}.png"
             torchvision.utils.save_image(image, filename, normalize=True)
 
 

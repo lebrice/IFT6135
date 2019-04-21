@@ -163,8 +163,9 @@ def save_1000_images(img_dir: str):
         print(i)
         latents = torch.randn(100, 100, device=device)
         images = gan.generator(latents)
+        os.makedirs(f"{img_dir}/img/", exist_ok=True)
         for j, image in enumerate(images):
-            filename = f"{img_dir}/img{i * 100 + j:03d}.png"
+            filename = f"{img_dir}/img/{i * 100 + j:03d}.png"
             torchvision.utils.save_image(image, filename, normalize=True)
 
 
@@ -182,40 +183,44 @@ if __name__ == '__main__':
     optimizerGenerator = Adam(gan.generator.parameters())
 
     svhn_loader = get_test_loader(64)
-    
-    for epoch in range(20):
-        print(f"------- EPOCH {epoch} --------")
+    try: 
+        gan.load_state_dict(torch.load('q3_gan_save.pth', map_location=device))
+        print('----Using saved model----')
 
-        running_loss_discriminator = 0
-        running_loss_generator = 0
-        
-        for i, (real_images, _) in enumerate(svhn_loader):
+    except FileNotFoundError:
+        for epoch in range(20):
+            print(f"------- EPOCH {epoch} --------")
 
-            #Train the discriminator for a couple iterations
-            optimizerDiscrimator.zero_grad()
-            real_images = real_images.to(device)
-            loss_disc = gan.lossDiscriminator(real_images)
-            running_loss_discriminator += loss_disc
-            loss_disc.backward()
-            optimizerDiscrimator.step()
+            running_loss_discriminator = 0
+            running_loss_generator = 0
+            
+            for i, (real_images, _) in enumerate(svhn_loader):
+
+                #Train the discriminator for a couple iterations
+                optimizerDiscrimator.zero_grad()
+                real_images = real_images.to(device)
+                loss_disc = gan.lossDiscriminator(real_images)
+                running_loss_discriminator += loss_disc
+                loss_disc.backward()
+                optimizerDiscrimator.step()
 
 
-            #Then train the generator
-            if i % disc_steps_per_gen_step == 0:
-                optimizerGenerator.zero_grad()
-                loss_gen = gan.lossGenerator(real_images.shape[0], device)
-                running_loss_generator += loss_gen
-                loss_gen.backward()
-                optimizerGenerator.step()
+                #Then train the generator
+                if i % disc_steps_per_gen_step == 0:
+                    optimizerGenerator.zero_grad()
+                    loss_gen = gan.lossGenerator(real_images.shape[0], device)
+                    running_loss_generator += loss_gen
+                    loss_gen.backward()
+                    optimizerGenerator.step()
 
-            if i % 100 == 0:
-                print(f"Training example {i} / {len(svhn_loader)}. DiscLoss: {running_loss_discriminator:.2f}, GenLoss: {running_loss_generator:.2f}")
-                running_loss_discriminator = 0
-                running_loss_generator = 0
-        if epoch % 5 == 0:
-            visual_samples(gan, 100, device, svhn_loader, step=epoch)
-        
-    torch.save(gan.state_dict(), 'q3_gan_save.pth')
+                if i % 100 == 0:
+                    print(f"Training example {i} / {len(svhn_loader)}. DiscLoss: {running_loss_discriminator:.2f}, GenLoss: {running_loss_generator:.2f}")
+                    running_loss_discriminator = 0
+                    running_loss_generator = 0
+            if epoch % 5 == 0:
+                visual_samples(gan, 100, device, svhn_loader, step=epoch)
+            
+        torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
     dimensions = 100
     
