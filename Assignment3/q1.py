@@ -11,10 +11,14 @@ except ModuleNotFoundError as e:
     print(e)
     print("Please install the modules listed in requirements-pip.txt with: 'pip install -r requirements-pip.txt'")
 
+
+cuda = torch.cuda.is_available()
+print("cuda?", cuda)
+
 def jensen_shannon_divergence(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.FloatTensor:
     D_theta_x = torch.sigmoid(network(x))
     D_theta_y = torch.sigmoid(network(y))
-    log_2 = torch.as_tensor(np.log(2))
+    log_2 = torch.as_tensor(np.log(2)).to(x.device)
     return log_2 + \
         0.5 * torch.log(D_theta_x).mean() + \
         0.5 * torch.log(1- D_theta_y).mean()
@@ -51,8 +55,8 @@ def gradient_pernalty(model, x, y):
         retain_graph=True,
         only_inputs=True,
     )
-    gradients = gradients[0]
-    gradient = gradients.view(gradients.size(0), -1)
+    gradient = gradients[0]
+    # gradient = gradients.view(gradients.size(0), -1)
     norm_2 = gradient.norm(p=2, dim=1)
     return ((norm_2 - 1)**2).mean()
 
@@ -73,7 +77,6 @@ def maximize_objective(objective, p, q, network=None, maxsteps=1000, threshold=0
         nn.Linear(256, 1),
     )
 
-    cuda = torch.cuda.is_available()
     if cuda:
         network = network.cuda()
     
@@ -86,7 +89,10 @@ def maximize_objective(objective, p, q, network=None, maxsteps=1000, threshold=0
     hook = StopIfConverged(threshold=threshold)
     with progressbar.ProgressBar(max_value=maxsteps, prefix=f"{objective.__name__}", redirect_stdout=True) as bar:
         for i, x, y in zip(range(maxsteps), p, q):
-            bar.update(i)
+            if cuda:
+                x = x.cuda()
+                y = y.cuda()
+
             loss = - objective(network, x, y)
             loss.backward()
 
@@ -96,6 +102,8 @@ def maximize_objective(objective, p, q, network=None, maxsteps=1000, threshold=0
             if hook(value):
                 # print(f"converged at step {i}")
                 break
+            
+            bar.update(i)
         else:
             print(f"Did not converge after {i} steps!")
             pass
@@ -170,7 +178,48 @@ def gaussian_distribution(mean=0, std=1, mini_batch_size=512) -> np.ndarray:
 
 def to_tensors(generator: Iterable[np.ndarray]) -> Iterable[torch.Tensor]:
     for item in generator:
-        yield torch.as_tensor(item).float()
+        t = torch.as_tensor(item).float()
+        if cuda:
+            t = t.cuda()
+        yield t
+
+
+def get_optimal_discriminator(f_0, f_1, **kwargs):
+    def discriminator_value_fn(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        D_theta_x = torch.log(network(x))
+        D_theta_y = torch.log(1 - network(y))
+        return (D_theta_x + D_theta_y).sum()
+
+    discriminator_network = nn.Sequential(
+        nn.Linear(1, 512),
+        nn.Tanh(),
+        nn.Linear(512, 256),
+        nn.Tanh(),
+        nn.Linear(256, 1),
+        nn.Sigmoid(),
+    )
+
+    value, disc = maximize_objective(
+        discriminator_value_fn,
+        network=discriminator_network,
+        p=f_0,
+        q=f_1,
+        **kwargs,
+    )
+
+    def disc_numpy(x: np.ndarray) -> np.ndarray:
+        """
+        Adds preprocessing and postprocessing to/from numpy
+        """
+        with torch.no_grad():
+            _x = torch.as_tensor(x).view([-1, 1]).float()
+            if cuda:
+                _x = _x.cuda()
+            d_x = disc(_x)
+            d_x = np.reshape(d_x.cpu().numpy(), x.shape)
+            return d_x
+
+    return disc_numpy
 
 
 def q1(p, q, **kwargs):
@@ -208,50 +257,15 @@ def q3():
     ax.legend()
     ax.set_xlabel("phi")
     ax.set_ylabel("Distance metric value")
-    plt.savefig("./q1_3.png")
+    plt.savefig("./images/q1_3.png")
     plt.show()
 
-
-def get_optimal_discriminator(f_0, f_1, **kwargs):
-    def discriminator_value_fn(network: nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        D_theta_x = torch.log(network(x))
-        D_theta_y = torch.log(1 - network(y))
-        return (D_theta_x + D_theta_y).sum()
-
-    discriminator_network = nn.Sequential(
-        nn.Linear(1, 512),
-        nn.Tanh(),
-        nn.Linear(512, 256),
-        nn.Tanh(),
-        nn.Linear(256, 1),
-        nn.Sigmoid(),
-    )
-
-    value, disc = maximize_objective(
-        discriminator_value_fn,
-        network=discriminator_network,
-        p=f_0,
-        q=f_1,
-        **kwargs,
-    )
-
-    def disc_numpy(x: np.ndarray) -> np.ndarray:
-        """
-        Adds preprocessing and postprocessing to/from numpy to D_star. 
-        """
-        with torch.no_grad():
-            _x = torch.as_tensor(x).view([-1, 1]).float()
-            d_x = disc(_x)
-            d_x = np.reshape(d_x.numpy(), x.shape)
-            return d_x
-
-    return disc_numpy
 
 def q4():
     import density_estimation
     plt.show()
 
 if __name__ == "__main__":
-    # q3()
+    q3()
     q4()
     
