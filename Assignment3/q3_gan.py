@@ -164,11 +164,11 @@ def save_1000_images(img_dir: str):
         latents = torch.randn(100, 100, device=device)
         images = gan.generator(latents)
         for j, image in enumerate(images):
-            filename = os.path.join(img_dir, "img", f"{i * 100 + j:03d}.png")
+            filename = f"{img_dir}/img{i * 100 + j:03d}.png"
             torchvision.utils.save_image(image, filename, normalize=True)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
     
@@ -229,8 +229,5 @@ if __name__ == '__main__':
     #3.3 Interpolation
     interpolation(gan, dimensions, device)
 
-    img_dir = "images/gan/fid/"
+    img_dir = "images/gan/fid"
     save_1000_images(img_dir)
-    
-    import score_fid
-    score_fid.main(img_dir)

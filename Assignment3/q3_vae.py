@@ -129,7 +129,31 @@ def interpolation(vae, dimensions, device):
         x_a[i] = a*x_0 + (1-a)*x_1
 
     torchvision.utils.save_image(x_a, 'images/vae/3_3data.png', normalize=True)
+
+
+
+def save_1000_images(img_dir: str):
+    import os
+    vae = VAE()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    vae.load_state_dict(torch.load('q3_vae_save.pth', map_location=device))
+    vae = vae.to(device)
+    vae.eval()
     
+    for p in vae.parameters():
+        p.requires_grad = False
+
+    for i in range(10):
+        print(i)
+        latents = torch.randn(100, 100, device=device)
+        images = vae.decoder(latents)
+        for j, image in enumerate(images):
+            filename = f"images/vae/fid/img{i * 100 + j:03d}.png"
+            torchvision.utils.save_image(image, filename, normalize=True)
+
+
+
+
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
@@ -181,3 +205,6 @@ if __name__ == '__main__':
 
     #3.3 Interpolation
     interpolation(vae, dimensions, device)
+
+    img_dir = "images/vae/fid"
+    save_1000_images(img_dir)
