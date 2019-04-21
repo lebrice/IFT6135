@@ -87,7 +87,7 @@ def calculate_fid_score(sample_feature_iterator,
     sigma_x = np.cov(x, rowvar=False)
     sigma_y = np.cov(y, rowvar=False)
     diff_means_squared = np.dot((mean_x - mean_y),(mean_x - mean_y).T)
-    sigma_term = sigma_x + sigma_y - 2 * scipy.linalg.sqrtm(sigma_x * sigma_y)
+    sigma_term = sigma_x + sigma_y - 2 * scipy.linalg.sqrtm(np.dot(sigma_x, sigma_y))
     return diff_means_squared + np.trace(sigma_term)
 
 
