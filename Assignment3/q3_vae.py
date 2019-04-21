@@ -35,8 +35,8 @@ class Decoder(Generator):
     def forward(self, x):
         x = x.view(x.size(0), -1, 1, 1)
         x = self.convTranspose(x)
-        #self.activation = nn.Tanh()
-        #x = self.activation(x)
+        self.activation = nn.Tanh()
+        x = self.activation(x)
         return x
 
 class VAE(nn.Module):
@@ -61,7 +61,14 @@ def visual_samples(vae, dimensions, device, svhn_loader):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3.1vae-generated.png', normalize=False)
+    torchvision.utils.save_image(generated, 'images/vae/3.1vae-generated.png', normalize=True)
+
+    #Original image vs Reconstruction 
+    x = next(iter(svhn_loader))[0]
+    torchvision.utils.save_image(x, 'images/vae/3.1vae-initial.png', normalize=True)
+    x = x.to(device)
+    y, mu, logvar = vae(x)
+    torchvision.utils.save_image(y, 'images/vae/3.1vae-restored.png', normalize=True)
     
 def disentangled_representation(vae, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal
@@ -74,7 +81,7 @@ def disentangled_representation(vae, dimensions, device, epsilon = 3):
         sample[i] += epsilon
 
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3_2positive_eps.png', normalize=False)
+    torchvision.utils.save_image(generated, 'images/vae/3_2positive_eps.png', normalize=True)
 
     #Do the same with the negative epsilon
     epsilon = -2*epsilon
@@ -83,7 +90,7 @@ def disentangled_representation(vae, dimensions, device, epsilon = 3):
 
     #Make a batch of the pertubations and pass it through the decoder
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3_2negative_eps.png', normalize=False)
+    torchvision.utils.save_image(generated, 'images/vae/3_2negative_eps.png', normalize=True)
 
 def interpolation(vae, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1
@@ -96,7 +103,7 @@ def interpolation(vae, dimensions, device):
         z_a[i] = a*z_0 + (1-a)*z_1
 
     generated = vae.decoder(z_a)
-    torchvision.utils.save_image(generated, 'images/vae/3_3latent.png', normalize=False)
+    torchvision.utils.save_image(generated, 'images/vae/3_3latent.png', normalize=True)
     
     # Interpolate in the data space between x_0 and x_1
     x_0 = vae.decoder(z_0)
@@ -107,7 +114,7 @@ def interpolation(vae, dimensions, device):
         a = i/10
         x_a[i] = a*x_0 + (1-a)*x_1
 
-    torchvision.utils.save_image(x_a, 'images/vae/3_3data.png', normalize=False)
+    torchvision.utils.save_image(x_a, 'images/vae/3_3data.png', normalize=True)
     
 
 
@@ -128,7 +135,7 @@ def save_1000_images(img_dir: str):
         images = vae.decoder(latents)
         for j, image in enumerate(images):
             filename = f"images/vae/fid/img/{i * 100 + j:03d}.png"
-            torchvision.utils.save_image(image, filename, normalize=False)
+            torchvision.utils.save_image(image, filename, normalize=True)
 
 
 
@@ -144,14 +151,14 @@ if __name__ == '__main__':
 
     running_loss = 0
 
-    trainloader, validloader, testloader = get_data_loaderNoNormalize("svhn", 64)
+    trainloader, validloader, testloader = get_data_loader("svhn", 64)
     
     try: 
         vae.load_state_dict(torch.load('q3_vae_save.pth', map_location=device))
         print('----Using saved model----')
 
     except FileNotFoundError:
-        for epoch in range(20):
+        for epoch in range(5):
 
             print(f"------- EPOCH {epoch} --------")
 
