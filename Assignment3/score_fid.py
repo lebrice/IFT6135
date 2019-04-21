@@ -5,6 +5,8 @@ import torchvision.transforms as transforms
 import torch
 import classify_svhn
 from classify_svhn import Classifier
+import numpy as np
+import scipy
 
 SVHN_PATH = "svhn"
 PROCESS_BATCH_SIZE = 32
@@ -72,14 +74,22 @@ def extract_features(classifier, data_loader):
 
 def calculate_fid_score(sample_feature_iterator,
                         testset_feature_iterator):
-    """
-    To be implemented by you!
-    """
-    raise NotImplementedError(
-        "TO BE IMPLEMENTED."
-        "Part of Assignment 3 Quantitative Evaluations"
-    )
-
+    import itertools
+    from itertools import islice
+    def take(n, iterable):
+        "Return first n items of the iterable as a numpy array"
+        return np.asarray(list(islice(iterable, n)))
+    
+    x = take(1000, sample_feature_iterator)
+    y = take(1000, testset_feature_iterator)
+    mean_x = np.mean(x, axis=0)
+    mean_y = np.mean(y, axis=0)
+    sigma_x = np.cov(x, rowvar=False)
+    sigma_y = np.cov(y, rowvar=False)
+    diff_means_squared = np.dot((mean_x - mean_y),(mean_x - mean_y).T)
+    print((sigma_x * sigma_y).shape)
+    sigma_term = sigma_x + sigma_y - 2 * scipy.linalg.sqrtm(sigma_x * sigma_y)
+    return diff_means_squared + np.trace(sigma_term)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
