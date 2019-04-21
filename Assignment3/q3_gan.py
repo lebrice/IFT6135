@@ -148,7 +148,8 @@ def interpolation(gan, dimensions, device):
     torchvision.utils.save_image(x_a, 'images/gan/3_3data.png', normalize=True)
 
 
-def save_1000_images():
+def save_1000_images(img_dir: str):
+    import os
     gan = GAN()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     gan.load_state_dict(torch.load('q3_gan_save.pth', map_location=device))
@@ -163,7 +164,8 @@ def save_1000_images():
         latents = torch.randn(100, 100, device=device)
         images = gan.generator(latents)
         for j, image in enumerate(images):
-            torchvision.utils.save_image(image, f"images/gan/fid/{i * 100 + j:03d}.png", normalize=True)
+            filename = os.path.join(img_dir, "img", f"{i * 100 + j:03d}.png")
+            torchvision.utils.save_image(image, filename, normalize=True)
 
 
 if __name__ == '__main__':
@@ -181,7 +183,6 @@ if __name__ == '__main__':
 
     svhn_loader = get_test_loader(64)
     
-    
     for epoch in range(20):
         print(f"------- EPOCH {epoch} --------")
 
@@ -194,27 +195,25 @@ if __name__ == '__main__':
             optimizerDiscrimator.zero_grad()
             real_images = real_images.to(device)
             loss_disc = gan.lossDiscriminator(real_images)
+            running_loss_discriminator += loss_disc
             loss_disc.backward()
             optimizerDiscrimator.step()
 
-            running_loss_discriminator += loss_disc
 
             #Then train the generator
             if i % disc_steps_per_gen_step == 0:
                 optimizerGenerator.zero_grad()
                 loss_gen = gan.lossGenerator(real_images.shape[0], device)
+                running_loss_generator += loss_gen
                 loss_gen.backward()
                 optimizerGenerator.step()
-
-                running_loss_generator += loss_gen
-            
 
             if i % 100 == 0:
                 print(f"Training example {i} / {len(svhn_loader)}. DiscLoss: {running_loss_discriminator:.2f}, GenLoss: {running_loss_generator:.2f}")
                 running_loss_discriminator = 0
                 running_loss_generator = 0
-        
-        visual_samples(gan, 100, device, svhn_loader, step=epoch)
+        if epoch % 5 == 0:
+            visual_samples(gan, 100, device, svhn_loader, step=epoch)
         
     torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
@@ -230,6 +229,8 @@ if __name__ == '__main__':
     #3.3 Interpolation
     interpolation(gan, dimensions, device)
 
-    save_1000_images()
-    exit()
-
+    img_dir = "images/gan/fid/"
+    save_1000_images(img_dir)
+    
+    import score_fid
+    score_fid.main(img_dir)

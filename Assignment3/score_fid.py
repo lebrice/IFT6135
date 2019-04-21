@@ -87,17 +87,17 @@ def calculate_fid_score(sample_feature_iterator,
     sigma_x = np.cov(x, rowvar=False)
     sigma_y = np.cov(y, rowvar=False)
     diff_means_squared = np.dot((mean_x - mean_y),(mean_x - mean_y).T)
-    print((sigma_x * sigma_y).shape)
     sigma_term = sigma_x + sigma_y - 2 * scipy.linalg.sqrtm(sigma_x * sigma_y)
     return diff_means_squared + np.trace(sigma_term)
 
-if __name__ == "__main__":
+
+def main(directory="images/gan/fid"):
     parser = argparse.ArgumentParser(
         description='Score a directory of images with the FID score.')
     parser.add_argument('--model', type=str, default="svhn_classifier.pt",
                         help='Path to feature extraction model.')
     parser.add_argument('directory', type=str,
-                        help='Path to image directory')
+                        help='Path to image directory', default=directory)
     args = parser.parse_args()
 
     quit = False
@@ -122,3 +122,7 @@ if __name__ == "__main__":
 
     fid_score = calculate_fid_score(sample_f, test_f)
     print("FID score:", fid_score)
+
+
+if __name__ == "__main__":
+    main()
