@@ -14,6 +14,9 @@ image_transform = transforms.Compose([
                          (.5, .5, .5))
 ])
 
+image_transformNoNomalize = transforms.Compose([
+    transforms.ToTensor()
+])
 
 def get_data_loader(dataset_location, batch_size):
     trainvalid = torchvision.datasets.SVHN(
@@ -45,6 +48,42 @@ def get_data_loader(dataset_location, batch_size):
             dataset_location, split='test',
             download=True,
             transform=image_transform
+        ),
+        batch_size=batch_size,
+    )
+
+    return trainloader, validloader, testloader
+
+def get_data_loaderNoNormalize(dataset_location, batch_size):
+    trainvalid = torchvision.datasets.SVHN(
+        dataset_location, split='train',
+        download=True,
+        transform=image_transformNoNomalize
+    )
+
+    trainset_size = int(len(trainvalid) * 0.9)
+    trainset, validset = dataset.random_split(
+        trainvalid,
+        [trainset_size, len(trainvalid) - trainset_size]
+    )
+
+    trainloader = torch.utils.data.DataLoader(
+        trainset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=2
+    )
+
+    validloader = torch.utils.data.DataLoader(
+        validset,
+        batch_size=batch_size,
+    )
+
+    testloader = torch.utils.data.DataLoader(
+        torchvision.datasets.SVHN(
+            dataset_location, split='test',
+            download=True,
+            transform=image_transformNoNomalize
         ),
         batch_size=batch_size,
     )

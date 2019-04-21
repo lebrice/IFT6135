@@ -51,8 +51,9 @@ def gradient_pernalty(model, x, y):
         retain_graph=True,
         only_inputs=True,
     )
-    gradient = gradients[0]
-    norm_2 = gradient.norm(dim=1, p=2)
+    gradients = gradients[0]
+    gradient = gradients.view(gradients.size(0), -1)
+    norm_2 = gradient.norm(p=2, dim=1)
     return ((norm_2 - 1)**2).mean()
 
 
