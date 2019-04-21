@@ -5,9 +5,8 @@ from torch import nn
 from typing import Tuple
 from score_fid import get_test_loader
 from torch.optim import Adam
-
+import numpy as np
 from q3_vae import Encoder, Decoder
-
 class Discriminator(nn.Module):
     def __init__(self, latent_size=100):
         super(Discriminator, self).__init__()
@@ -46,7 +45,7 @@ class GAN(nn.Module):
 
         self.lambda_coefficient = 10.0
 
-    def lossDiscriminator(self, reals: torch.Tensor, device, latents: torch.Tensor = None) -> torch.FloatTensor:
+    def lossDiscriminator(self, reals: torch.Tensor, latents: torch.Tensor = None) -> torch.FloatTensor:
         """
         WGAN-GP Loss
         """
@@ -57,24 +56,22 @@ class GAN(nn.Module):
         reals_score = self.discriminator(reals)
         loss = fakes_score.mean() - reals_score.mean()
         
-        grad_penalty = self.gradient_pernalty(reals, fakes, device)
+        grad_penalty = self.gradient_pernalty(reals, fakes)
         loss += self.lambda_coefficient * grad_penalty
         return loss
 
     def lossGenerator(self, batch_size, device, latents: torch.Tensor = None) -> torch.FloatTensor:
         latents = torch.randn([batch_size, self.latent_size], device=device)
-        
         fakes = self.generator(latents)
-
         fakes_score = self.discriminator(fakes)
         loss = -fakes_score.mean()
         return loss
         
-    def gradient_pernalty(self, reals, fakes, device):
+    def gradient_pernalty(self, reals, fakes):
         """
         Inspired from "https://discuss.pytorch.org/t/gradient-penalty-with-respect-to-the-network-parameters/11944/2"
         """
-        z = random_interpolation(reals, fakes, device)
+        z = random_interpolation(reals, fakes)
         z.requires_grad_(True)
 
         output = self.discriminator(z)
@@ -90,23 +87,19 @@ class GAN(nn.Module):
         norm_2 = gradient.norm(p=2)
         return ((norm_2 - 1)**2).mean()
     
-def random_interpolation(x, y, device):
-    a = torch.rand((x.size(0), 1, 1, 1), device=device)
-    a = a.expand(x.size(0), x.size(1), x.size(2), x.size(3))
+
+def random_interpolation(x, y):
+    a = torch.rand((x.size(0), 1, 1, 1), device=x.device)
+    # a = a.expand(x.size(0), x.size(1), x.size(2), x.size(3))
     return a * x + (1-a) * y
 
-def visual_samples(gan, dimensions, device, svhn_loader):
+
+def visual_samples(gan, dimensions, device, svhn_loader, step=0):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3.1gan-generated.png', normalize=True)
-    
-    # #Original image vs Reconstruction 
-    # x = next(iter(svhn_loader))[0]
-    # torchvision.utils.save_image(x, 'images/3.1vae-initial.png', normalize=True)
-    # x = x.to(device)
-    # y, mu, logvar = vae(x)
-    # torchvision.utils.save_image(y, 'images/3.1vae-restored.png', normalize=True)
+    torchvision.utils.save_image(generated, f"images/gan/3.1gan-generated-{step}.png", normalize=True)
+
 
 def disentangled_representation(gan, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal
@@ -135,10 +128,10 @@ def interpolation(gan, dimensions, device):
     z_0 = torch.randn(1,dimensions, device=device)
     z_1 = torch.randn(1,dimensions, device=device)
     z_a = torch.zeros([11,dimensions], device=device)
-
+    
     for i in range(11):
         a = i/10
-        z_a[i] = a*z_0 + (1-a)*z_1
+        z_a[i] = torch.lerp(z_0, z_1, a)
 
     generated = gan.generator(z_a)
     torchvision.utils.save_image(generated, 'images/gan/3_3latent.png', normalize=True)
@@ -150,9 +143,28 @@ def interpolation(gan, dimensions, device):
 
     for i in range(11):
         a = i/10
-        x_a[i] = a*x_0 + (1-a)*x_1
+        x_a[i] = torch.lerp(x_0, x_1, a)
 
     torchvision.utils.save_image(x_a, 'images/gan/3_3data.png', normalize=True)
+
+
+def save_1000_images():
+    gan = GAN()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    gan.load_state_dict(torch.load('q3_gan_save.pth', map_location=device))
+    gan = gan.to(device)
+    gan.eval()
+    
+    for p in gan.parameters():
+        p.requires_grad = False
+
+    for i in range(10):
+        print(i)
+        latents = torch.randn(100, 100, device=device)
+        images = gan.generator(latents)
+        for j, image in enumerate(images):
+            torchvision.utils.save_image(image, f"images/gan/fid/{i * 100 + j:03d}.png", normalize=True)
+
 
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -160,57 +172,55 @@ if __name__ == '__main__':
     
     gan = GAN()
     gan = gan.to(device)
+    gan.train()
 
-    optimizerDiscrimator = Adam(gan.discriminator.parameters(), lr=3e-4, betas=(0.5, 0.9))
-    optimizerGenerator = Adam(gan.generator.parameters(), lr=3e-4, betas=(0.5, 0.9))
+    disc_steps_per_gen_step = 5
+
+    optimizerDiscrimator = Adam(gan.discriminator.parameters())
+    optimizerGenerator = Adam(gan.generator.parameters())
 
     svhn_loader = get_test_loader(64)
     
-    #try: 
-    #    gan.load_state_dict(torch.load('q3_gan_save.pth', map_location=device))
-    #    print('----Using saved model----')
-
-    #except FileNotFoundError:
-    #for epoch in range(20):
-    for epoch in range(10):
+    
+    for epoch in range(20):
         print(f"------- EPOCH {epoch} --------")
 
         running_loss_discriminator = 0
         running_loss_generator = 0
         
         for i, (real_images, _) in enumerate(svhn_loader):
-            gan.train()
 
             #Train the discriminator for a couple iterations
             optimizerDiscrimator.zero_grad()
             real_images = real_images.to(device)
-            loss = gan.lossDiscriminator(real_images, device)
-            running_loss_discriminator += loss
-
-            loss.backward()
+            loss_disc = gan.lossDiscriminator(real_images)
+            loss_disc.backward()
             optimizerDiscrimator.step()
 
+            running_loss_discriminator += loss_disc
+
             #Then train the generator
-            if(i%5 == 0):
+            if i % disc_steps_per_gen_step == 0:
                 optimizerGenerator.zero_grad()
                 loss_gen = gan.lossGenerator(real_images.shape[0], device)
-                running_loss_generator += loss_gen
-
                 loss_gen.backward()
                 optimizerGenerator.step()
-            
-            if(i%10 == 0):
-                visual_samples(gan, 100, device, svhn_loader)
 
-            if (i + 1) % 100 == 0:
-                print(f"Training example {i + 1} / {len(svhn_loader)}. DiscriminatorLoss: {running_loss_discriminator}", end="\r\n")
-                print(f"Training example {i + 1} / {len(svhn_loader)}. GeneratorLoss: {running_loss_generator}", end="\r\n")
-                running_loss = 0
+                running_loss_generator += loss_gen
+            
+
+            if i % 100 == 0:
+                print(f"Training example {i} / {len(svhn_loader)}. DiscLoss: {running_loss_discriminator:.2f}, GenLoss: {running_loss_generator:.2f}")
+                running_loss_discriminator = 0
+                running_loss_generator = 0
         
-        torch.save(gan.state_dict(), 'q3_gan_save.pth')
+        visual_samples(gan, 100, device, svhn_loader, step=epoch)
+        
+    torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
     dimensions = 100
-        
+    
+    gan.eval()
     #3.1 Visual samples
     visual_samples(gan, dimensions, device, svhn_loader)
 
@@ -219,3 +229,7 @@ if __name__ == '__main__':
 
     #3.3 Interpolation
     interpolation(gan, dimensions, device)
+
+    save_1000_images()
+    exit()
+
