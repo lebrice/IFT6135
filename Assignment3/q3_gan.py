@@ -94,7 +94,7 @@ def visual_samples(gan, dimensions, device, svhn_loader, step=0):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3_1gan-generated.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated, 'images/gan/3_1gan-generated.png', normalize=True)
     
 def disentangled_representation(gan, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal

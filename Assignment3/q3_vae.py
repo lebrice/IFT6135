@@ -61,14 +61,14 @@ def visual_samples(vae, dimensions, device, svhn_loader):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3_1vae-generated.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated, 'images/vae/3_1vae-generated.png', normalize=True)
 
     #Original image vs Reconstruction 
     x = next(iter(svhn_loader))[0]
-    torchvision.utils.save_image(x, 'images/vae/3_1vae-initial.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(x, 'images/vae/3_1vae-initial.png', normalize=True)
     x = x.to(device)
     y, mu, logvar = vae(x)
-    torchvision.utils.save_image(y, 'images/vae/3_1vae-restored.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(y, 'images/vae/3_1vae-restored.png', normalize=True)
     
 def disentangled_representation(vae, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal
