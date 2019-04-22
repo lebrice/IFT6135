@@ -191,5 +191,5 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Running on {device}")
 
-    #part1(device)
+    part1(device)
     part2(device)

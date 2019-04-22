@@ -175,7 +175,6 @@ if __name__ == '__main__':
                 loss.backward()
                 optimizer.step()
 
-                #Debug
                 if(i%10 == 0):
                     visual_samples(vae, 100, device, testloader)
 

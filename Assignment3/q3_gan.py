@@ -94,9 +94,8 @@ def visual_samples(gan, dimensions, device, svhn_loader, step=0):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = gan.generator(z)
-    #debug
     torchvision.utils.save_image(generated, 'images/gan/3.1gan-generated.png', normalize=True)
-    #torchvision.utils.save_image(generated, f"images/gan/3.1gan-generated-{step}.png", normalize=True)
+    
 def disentangled_representation(gan, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal
     z = torch.randn(dimensions, device=device)
@@ -228,16 +227,13 @@ if __name__ == '__main__':
                     optimizerGenerator.step()
                     running_loss_generator += fakes_score_mean
                     
-                #Debug
-                if(i%10 == 0):
-                    visual_samples(gan, 100, device, testloader)
 
                 if i % 100 == 0:
                     print(f"Training example {i} / {len(trainloader)}. DiscLoss: {running_loss_discriminator:.2f}, GenLoss: {running_loss_generator:.2f}")
                     running_loss_discriminator = 0
                     running_loss_generator = 0
-            #if epoch % 5 == 0:
-                #visual_samples(gan, 100, device, svhn_loader, step=epoch)
+            if epoch % 5 == 0:
+                visual_samples(gan, 100, device, svhn_loader, step=epoch)
         
         torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
