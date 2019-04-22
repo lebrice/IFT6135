@@ -81,7 +81,8 @@ def disentangled_representation(vae, dimensions, device, epsilon = 3):
         sample[i] += epsilon
 
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3_2positive_eps.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated[0], 'images/vae/3_2_original.png', normalize=True)
+    torchvision.utils.save_image(generated[1:], 'images/vae/3_2positive_eps.png', nrow=10, normalize=True)
 
     #Do the same with the negative epsilon
     epsilon = -2*epsilon
@@ -90,7 +91,7 @@ def disentangled_representation(vae, dimensions, device, epsilon = 3):
 
     #Make a batch of the pertubations and pass it through the decoder
     generated = vae.decoder(z)
-    torchvision.utils.save_image(generated, 'images/vae/3_2negative_eps.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated[1:], 'images/vae/3_2negative_eps.png', nrow=10, normalize=True)
 
 def interpolation(vae, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1

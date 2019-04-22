@@ -107,7 +107,8 @@ def disentangled_representation(gan, dimensions, device, epsilon = 3):
         sample[i] += epsilon
 
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3_2positive_eps.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated[0], 'images/gan/3_2_original.png', normalize=True)
+    torchvision.utils.save_image(generated[1:], 'images/gan/3_2positive_eps.png', nrow=10, normalize=True)
 
     #Do the same with the negative epsilon
     epsilon = -2*epsilon
@@ -116,7 +117,7 @@ def disentangled_representation(gan, dimensions, device, epsilon = 3):
 
     #Make a batch of the pertubations and pass it through the generator
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3_2negative_eps.png', nrow=10, normalize=True)
+    torchvision.utils.save_image(generated[1:], 'images/gan/3_2negative_eps.png', nrow=10, normalize=True)
 
 def interpolation(gan, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1
