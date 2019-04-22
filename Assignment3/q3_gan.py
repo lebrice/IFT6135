@@ -94,7 +94,7 @@ def visual_samples(gan, dimensions, device, svhn_loader, step=0):
     # Generate new images
     z = torch.randn(64, dimensions, device=device)
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3.1gan-generated.png', normalize=True)
+    torchvision.utils.save_image(generated, 'images/gan/3_1gan-generated.png', nrow=10, normalize=True)
     
 def disentangled_representation(gan, dimensions, device, epsilon = 3):
     #Sample from prior p(z) which is a Std Normal
@@ -107,7 +107,7 @@ def disentangled_representation(gan, dimensions, device, epsilon = 3):
         sample[i] += epsilon
 
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3_2positive_eps.png', normalize=True)
+    torchvision.utils.save_image(generated, 'images/gan/3_2positive_eps.png', nrow=10, normalize=True)
 
     #Do the same with the negative epsilon
     epsilon = -2*epsilon
@@ -116,7 +116,7 @@ def disentangled_representation(gan, dimensions, device, epsilon = 3):
 
     #Make a batch of the pertubations and pass it through the generator
     generated = gan.generator(z)
-    torchvision.utils.save_image(generated, 'images/gan/3_2negative_eps.png', normalize=True)
+    torchvision.utils.save_image(generated, 'images/gan/3_2negative_eps.png', nrow=10, normalize=True)
 
 def interpolation(gan, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1
@@ -129,7 +129,7 @@ def interpolation(gan, dimensions, device):
         z_a[i] = a*z_0 + (1-a)*z_1
 
     generated = gan.generator(z_a)
-    torchvision.utils.save_image(generated, 'images/gan/3_3latent.png', normalize=True)
+    torchvision.utils.save_image(generated, 'images/gan/3_3latent.png', nrow=11, normalize=True)
     
     # Interpolate in the data space between x_0 and x_1
     x_0 = gan.generator(z_0)
@@ -140,7 +140,7 @@ def interpolation(gan, dimensions, device):
         a = i/10
         x_a[i] = a*x_0 + (1-a)*x_1
 
-    torchvision.utils.save_image(x_a, 'images/gan/3_3data.png', normalize=True)
+    torchvision.utils.save_image(x_a, 'images/gan/3_3data.png', nrow=11, normalize=True)
 
 
 def save_1000_images(img_dir: str):
@@ -233,7 +233,7 @@ if __name__ == '__main__':
                     running_loss_discriminator = 0
                     running_loss_generator = 0
             if epoch % 5 == 0:
-                visual_samples(gan, 100, device, svhn_loader, step=epoch)
+                visual_samples(gan, 100, device, trainloader, step=epoch)
         
         torch.save(gan.state_dict(), 'q3_gan_save.pth')
 
