@@ -138,7 +138,7 @@ def interpolation(gan, dimensions, device):
 
     for i in range(11):
         a = i/10
-        x_a[i] = torch.lerp(x_0, x_1, a)
+        x_a[i] = a*x_0 + (1-a)*x_1
 
     torchvision.utils.save_image(x_a, 'images/gan/3_3data.png', normalize=True)
 
