@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torchvision
 from torch import nn, optim
@@ -93,17 +94,28 @@ def disentangled_representation(vae, dimensions, device, epsilon = 3):
     generated = vae.decoder(z)
     torchvision.utils.save_image(generated[1:], 'images/vae/3_2negative_eps.png', nrow=10, normalize=True)
 
+def make_tensor(tens_list):
+    batch = None
+    for img in tens_list:
+        if batch is None:
+            batch = img
+        else:
+            batch = torch.cat((batch,img))
+    return batch
+
 def interpolation(vae, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1
     z_0 = torch.randn(1,dimensions, device=device)
     z_1 = torch.randn(1,dimensions, device=device)
-    z_a = torch.zeros([11,dimensions], device=device)
+    generated = []
 
     for i in range(11):
         a = i/10
-        z_a[i] = a*z_0 + (1-a)*z_1
+        z_a = a*z_0 + (1-a)*z_1
+        output = vae.decoder(z_a)
+        generated.append(output) 
 
-    generated = vae.decoder(z_a)
+    generated = torch.cat(generated)
     torchvision.utils.save_image(generated, 'images/vae/3_3latent.png', nrow=11, normalize=True)
     
     # Interpolate in the data space between x_0 and x_1
@@ -116,7 +128,6 @@ def interpolation(vae, dimensions, device):
         x_a[i] = a*x_0 + (1-a)*x_1
 
     torchvision.utils.save_image(x_a, 'images/vae/3_3data.png', nrow=11, normalize=True)
-    
 
 
 def save_1000_images(img_dir: str):

@@ -123,13 +123,15 @@ def interpolation(gan, dimensions, device):
     # Interpolate in the latent space between z_0 and z_1
     z_0 = torch.randn(1,dimensions, device=device)
     z_1 = torch.randn(1,dimensions, device=device)
-    z_a = torch.zeros([11,dimensions], device=device)
+    generated = []
 
     for i in range(11):
         a = i/10
-        z_a[i] = a*z_0 + (1-a)*z_1
+        z_a = a*z_0 + (1-a)*z_1
+        output = gan.generator(z_a)
+        generated.append(output) 
 
-    generated = gan.generator(z_a)
+    generated = torch.cat(generated)
     torchvision.utils.save_image(generated, 'images/gan/3_3latent.png', nrow=11, normalize=True)
     
     # Interpolate in the data space between x_0 and x_1
